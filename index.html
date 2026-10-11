@@ -1937,6 +1937,12 @@ render();
 function vis(){try{return K()}catch(e){return false}}
 setInterval(function(){b.style.display=vis()?'flex':'none'},300);
 b.onclick=function(){parent.postMessage('collancer:switch','*')};})();<\/script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"><\/script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"><\/script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"><\/script>
+<script src="connect/firebase-config.js"><\/script>
+<script type="module" src="connect/ai/index.js"><\/script>
+<script src="connect/creator-connect.js"><\/script>
 </body></html></script>
 <script type="text/plain" id="src-brand"><!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"><title>Collancer – Liquid Glass</title><style>
 :root{box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
@@ -2586,6 +2592,12 @@ if(u){apply(u);render()}else showGate();
 function vis(){try{return K()}catch(e){return false}}
 setInterval(function(){b.style.display=vis()?'flex':'none'},300);
 b.onclick=function(){parent.postMessage('collancer:switch','*')};})();<\/script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"><\/script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"><\/script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"><\/script>
+<script src="connect/firebase-config.js"><\/script>
+<script type="module" src="connect/ai/index.js"><\/script>
+<script src="connect/brand-connect.js"><\/script>
 </body></html></script>
 <div id="toast" role="status" aria-live="polite"></div>
 
@@ -2627,4 +2639,5 @@ window.addEventListener('message',function(e){if(e.data==='collancer:switch')bac
 try{var last=localStorage.getItem('collancer_role');if(last){var el=document.querySelector('.role[data-role="'+last+'"]');if(el)el.click()}}catch(e){}
 })();
 </script>
+<script src="connect/shell-connect.js"></script>
 </body></html>
