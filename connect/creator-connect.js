@@ -100,6 +100,7 @@ function teardown() {
 function init() {
   FB = window.FB; DB = FB.db;
   wireEvents();
+  initPullToRefresh();
   FB.onAuth(function (u) {
     if (!u) { teardown(); try { Collancer.go('login'); } catch (e) {} return; }
     uid = u.uid;
@@ -193,6 +194,66 @@ function doGoogle() {
       });
     })
     .catch(function (err) { if (note) note.textContent = friendlyAuthError(err); });
+}
+
+/* ---------------- pull to refresh ---------------- */
+function initPullToRefresh() {
+  var startY = 0, pulling = false, ptrEl = null;
+  function ensurePtr() {
+    if (ptrEl) return ptrEl;
+    ptrEl = document.createElement('div');
+    ptrEl.id = 'ccon-ptr';
+    ptrEl.style.cssText = 'position:fixed;top:0;left:0;right:0;display:flex;align-items:center;justify-content:center;height:0;overflow:hidden;z-index:99998;transition:height .2s;pointer-events:none;';
+    ptrEl.innerHTML = '<div style="width:38px;height:38px;border-radius:50%;background:linear-gradient(180deg,#3a3d44 0,#16181c 46%,#000 100%);border:1px solid #000;box-shadow:0 0 0 1px rgba(255,255,255,.6),0 0 0 2px rgba(0,0,0,.9),inset 0 1.5px 0 rgba(255,255,255,.45);display:flex;align-items:center;justify-content:center;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.5"><path d="M21 12a9 9 0 1 1-2.6-6.4"/><path d="M21 3v6h-6"/></svg></div>';
+    document.body.appendChild(ptrEl);
+    return ptrEl;
+  }
+  function isAtTop() {
+    /* Check if any scrollable ancestor is at top; default to document. */
+    var el = document.scrollingElement || document.documentElement;
+    if (el.scrollTop > 0) return false;
+    return true;
+  }
+  document.addEventListener('touchstart', function (e) {
+    if (e.touches.length !== 1) return;
+    if (!isAtTop()) return;
+    startY = e.touches[0].clientY;
+    pulling = true;
+  }, { passive: true });
+  document.addEventListener('touchmove', function (e) {
+    if (!pulling) return;
+    var dy = e.touches[0].clientY - startY;
+    if (dy > 0 && isAtTop()) {
+      var el = ensurePtr();
+      var h = Math.min(70, dy * 0.5);
+      el.style.height = h + 'px';
+      if (dy > 110) el.dataset.armed = '1'; else el.dataset.armed = '';
+    } else if (dy <= 0) {
+      pulling = false;
+      if (ptrEl) ptrEl.style.height = '0px';
+    }
+  }, { passive: true });
+  document.addEventListener('touchend', function () {
+    if (!pulling) return;
+    pulling = false;
+    var el = ptrEl;
+    if (el && el.dataset.armed === '1') {
+      el.dataset.armed = '';
+      el.style.height = '56px';
+      toast('Refreshing…');
+      /* Refresh all data. */
+      try {
+        if (uid) {
+          loadCreatorDoc();
+          if (typeof loadBookings === 'function') loadBookings();
+          if (typeof loadMarket === 'function') loadMarket();
+        }
+      } catch (e) {}
+      setTimeout(function () { el.style.height = '0px'; }, 900);
+    } else if (el) {
+      el.style.height = '0px';
+    }
+  }, { passive: true });
 }
 
 /* ---------------- event interception (capture phase; originals never fire) ---------------- */
