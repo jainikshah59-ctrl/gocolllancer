@@ -109,6 +109,21 @@ function init() {
 }
 
 function afterLogin(u) {
+  /* Instagram OAuth return: show success/failure toast from sessionStorage. */
+  try {
+    var igRes = sessionStorage.getItem('collancer_ig_result');
+    if (igRes) {
+      sessionStorage.removeItem('collancer_ig_result');
+      if (igRes === 'connected') {
+        toast('Instagram connected successfully.');
+      } else if (igRes.indexOf('error=') === 0) {
+        var em = decodeURIComponent(igRes.slice(6)).replace(/[-_]/g, ' ');
+        toast('Instagram connect failed: ' + em + '.');
+      } else {
+        toast('Instagram connect finished: ' + igRes.replace(/[-_]/g, ' ') + '.');
+      }
+    }
+  } catch (e) {}
   loadCreatorDoc();
   loadBookings();
   loadMarket();
