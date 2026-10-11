@@ -73,9 +73,25 @@ async function brandAnswer(q, context = {}) {
     let pooled = null;
     try { pooled = await poolAnswer(q, false); } catch { /* provider chain exhausted */ }
     if (pooled && pooled.text) return { answer: pooled.text, creators: [], actions: [], confidence: 0.78 };
+
+    // Provider pool is optional. If it is down or rate-limited, keep answering
+    // from the bundled Collancer knowledge database and deterministic engine.
+    try {
+      const local = await answerQuery(q, ctx);
+      if (local && typeof local.answer === 'string' && local.answer.trim() &&
+          !/AI service is temporarily unavailable|please try again in a moment/i.test(local.answer)) {
+        return { ...local, confidence: local.confidence || 0.72 };
+      }
+    } catch { /* continue to direct knowledge retrieval */ }
+    try {
+      const match = findKnowledge(q, 'brand');
+      if (match && match.entry && match.entry.answer) {
+        return { answer: match.entry.answer, creators: [], actions: [], confidence: match.confidence || 0.7 };
+      }
+    } catch { /* use the explicit unavailable message only when local lookup also fails */ }
     return {
-      answer: 'The AI service is temporarily unavailable. Please try again in a moment.',
-      creators: [], actions: [], confidence: 0,
+      answer: 'I could not find a reliable answer in the local Collancer knowledge base for that question. Please try asking with a little more detail or contact Collancer support.',
+      creators: [], actions: [], confidence: 0.2,
     };
   }
   return await answerQuery(q, ctx);

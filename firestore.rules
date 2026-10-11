@@ -148,9 +148,44 @@ service cloud.firestore {
     }
 
     match /businesses/{uid} {
-      // Brand/business access is intentionally locked during the creator-first rollout.
-      // Existing business data remains available to server/admin tooling only.
-      allow get, list, create, update, delete: if isAdmin();
+      // Brands can access only their own profile. Financial entitlements and balances
+      // are server/admin-managed and cannot be changed by a client.
+      allow get: if isAdmin() || isOwner(uid);
+      allow list: if isAdmin();
+
+      allow create: if isOwner(uid)
+        && request.resource.data.keys().hasOnly([
+          'bizName', 'email', 'phone', 'pfp', 'industry', 'address',
+          'walletBalance', 'isPro', 'proActive', 'createdAt'
+        ])
+        && request.resource.data.bizName is string
+        && request.resource.data.bizName.size() >= 2
+        && request.resource.data.bizName.size() <= 120
+        && request.resource.data.email == request.auth.token.email
+        && request.resource.data.phone is string
+        && request.resource.data.pfp is string
+        && request.resource.data.industry is string
+        && request.resource.data.address is string
+        && request.resource.data.walletBalance == 0
+        && request.resource.data.isPro == false
+        && request.resource.data.proActive == false
+        && request.resource.data.createdAt == request.time;
+
+      allow update: if isAdmin()
+        || (isOwner(uid)
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+            'bizName', 'email', 'phone', 'pfp', 'industry', 'address'
+          ])
+          && request.resource.data.bizName is string
+          && request.resource.data.bizName.size() >= 2
+          && request.resource.data.bizName.size() <= 120
+          && request.resource.data.email == request.auth.token.email
+          && request.resource.data.phone is string
+          && request.resource.data.pfp is string
+          && request.resource.data.industry is string
+          && request.resource.data.address is string);
+
+      allow delete: if isAdmin();
     }
 
     /* ---------------- bookings ---------------- */
@@ -300,7 +335,13 @@ service cloud.firestore {
           && resource.data.status == 'matched'
           && request.resource.data.status == 'open'
           && request.resource.data.diff(resource.data).affectedKeys()
-            .hasOnly(['status', 'acceptedOfferId', 'matchedAt', 'updatedAt']));
+            .hasOnly(['status', 'acceptedOfferId', 'matchedAt', 'updatedAt']))
+        // creator proposal submission updates only the visible proposal counter by one
+        || (isAuthed()
+          && exists(/databases/$(database)/documents/creators/$(request.auth.uid))
+          && resource.data.status in ['open', 'matched']
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['offerCount'])
+          && docVal(request.resource.data, 'offerCount', 0) == docVal(resource.data, 'offerCount', 0) + 1);
 
       allow delete: if isAuthed() && resource.data.bizId == request.auth.uid;
     }
