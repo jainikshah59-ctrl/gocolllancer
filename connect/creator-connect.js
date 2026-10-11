@@ -111,12 +111,14 @@ function init() {
 
 function afterLogin(u) {
   /* Instagram OAuth return: show success/failure toast from sessionStorage. */
+  var igJustConnected = false;
   try {
     var igRes = sessionStorage.getItem('collancer_ig_result');
     if (igRes) {
       sessionStorage.removeItem('collancer_ig_result');
       if (igRes === 'connected') {
         toast('Instagram connected successfully.');
+        igJustConnected = true;
       } else if (igRes.indexOf('error=') === 0) {
         var em = decodeURIComponent(igRes.slice(6)).replace(/[-_]/g, ' ');
         toast('Instagram connect failed: ' + em + '.');
@@ -126,6 +128,20 @@ function afterLogin(u) {
     }
   } catch (e) {}
   loadCreatorDoc();
+  /* After Instagram connect, force a server refresh to bypass any stale cache,
+   * then re-paint. This ensures the freshly synced data appears immediately. */
+  if (igJustConnected) {
+    setTimeout(function () {
+      try {
+        DB.collection('creators').doc(uid).get({ source: 'server' }).then(function (snap) {
+          if (snap.exists) {
+            creatorDoc = snap.data(); creatorDoc.id = uid;
+            paintProfile();
+          }
+        }).catch(function () {});
+      } catch (e) {}
+    }, 1500);
+  }
   loadBookings();
   loadMarket();
 }
@@ -315,7 +331,7 @@ function paintProfile() {
   try {
     var avatar = card.querySelector('.t3.teal');
     if (avatar) {
-      var pfp = ig.profilePicUrl || d.pfp;
+      var pfp = ig.profilePicUrl || ig.profilePic || d.pfp;
       if (pfp) {
         avatar.style.backgroundImage = 'url("' + pfp.replace(/"/g, '') + '")';
         avatar.style.backgroundSize = 'cover';
