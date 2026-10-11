@@ -13,7 +13,7 @@ import { buildInstagramObject } from '../lib/instagramSync.js';
 import { createHmac, timingSafeEqual } from 'crypto';
 import { FieldValue } from 'firebase-admin/firestore';
 
-const APP_URL = process.env.APP_URL || 'https://collancer-app.vercel.app';
+const APP_URL = process.env.APP_URL || 'https://gocolllancer.vercel.app';
 const TOKEN_DAYS = 60;
 
 const go = (res, reason) =>
