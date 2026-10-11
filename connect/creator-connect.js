@@ -60,9 +60,9 @@ function toast(msg) {
   if (!t) {
     t = document.createElement('div');
     t.id = 'ccon-toast';
-    t.className = 'glass';
     t.setAttribute('role', 'status');
-    t.style.cssText = 'position:fixed;left:50%;bottom:26px;transform:translateX(-50%) translateY(16px);z-index:9999;padding:12px 18px;border-radius:16px;font-size:13.5px;font-weight:600;opacity:0;transition:opacity .25s,transform .25s;pointer-events:none;max-width:86vw;text-align:center;';
+    /* 3D black button design, white text, above bottom bar — matches app design. */
+    t.style.cssText = 'position:fixed;left:50%;bottom:calc(110px + env(safe-area-inset-bottom,0px));transform:translateX(-50%) translateY(16px);z-index:99999;padding:14px 22px;border-radius:28px;color:#fff;font-weight:800;font-size:15px;text-align:center;background:linear-gradient(180deg,#3a3d44 0,#16181c 46%,#000 100%);border:1px solid #000;box-shadow:0 0 0 1px rgba(255,255,255,.6),0 0 0 2px rgba(0,0,0,.9),0 2px 0 2px #98a1ab,0 12px 18px -8px rgba(0,0,0,.55),inset 0 1.5px 0 rgba(255,255,255,.45),inset 0 -2px 4px rgba(255,255,255,.08);opacity:0;transition:opacity .25s,transform .25s;pointer-events:none;max-width:86vw;';
     document.body.appendChild(t);
   }
   t.textContent = msg;
@@ -72,7 +72,7 @@ function toast(msg) {
   t._tm = setTimeout(function () {
     t.style.opacity = '0';
     t.style.transform = 'translateX(-50%) translateY(16px)';
-  }, 2600);
+  }, 3000);
 }
 function friendlyAuthError(err) {
   var c = (err && err.code) || '';
