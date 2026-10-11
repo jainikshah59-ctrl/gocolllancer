@@ -20,7 +20,7 @@ export default async function handler(req, res) {
   try {
     if (req.method !== 'POST') return fail('Use POST.');
     const appId = process.env.INSTAGRAM_APP_ID;
-    const redirectUri = process.env.INSTAGRAM_REDIRECT_URI || 'https://collancer-app.vercel.app/api/instagram-callback';
+    const redirectUri = process.env.INSTAGRAM_REDIRECT_URI || 'https://gocolllancer.vercel.app/api/instagram-callback';
     if (!appId || !process.env.INSTAGRAM_APP_SECRET) return fail('not-configured');
 
     const body = readBody(req);
