@@ -621,7 +621,7 @@ function paintRequirements() {
   if (cb) cb.textContent = items.length;
   list.innerHTML = items.map(function (r, i) {
     return '<div class="glass card" data-req="' + esc(r.id) + '">' +
-      '<div style="display:flex;gap:12.5px;align-items:center"><div class="t3 teal" style="width:50.5px;height:50.5px"><svg viewBox="0 0 24 24"><use href="#tag"/></svg></div>' +
+      '<div style="display:flex;gap:12.5px;align-items:center"><div class="t3 pk teal" style="width:50.5px;height:50.5px"><img src="icons/tag.png" alt="" draggable="false"></div>' +
       '<div style="flex:1"><div style="font-size:16.5px;font-weight:800">' + esc(r.title || 'Brand brief') + '</div>' +
       '<div style="margin-top:2.5px;font-size:12px;color:#55616d">' + esc(r.bizName || 'Brand') + ' \u00B7 ' + esc(agoStr(r.createdAt)) + '</div></div>' +
       (r.budget ? '<div class="bud">Budget<b>' + inr(r.budget) + '</b></div>' : '') + '</div>' +
@@ -662,7 +662,7 @@ function paintProposals() {
   var cb2 = $('#cb2', root); if (cb2) cb2.textContent = myOffers.length;
   list.innerHTML = myOffers.map(function (x) {
     var pd = x.status === 'pending';
-    return '<div class="glass card"><div style="display:flex;gap:12.5px;align-items:center"><div class="t3 teal" style="width:43px;height:43px"><svg viewBox="0 0 24 24"><use href="#send"/></svg></div>' +
+    return '<div class="glass card"><div style="display:flex;gap:12.5px;align-items:center"><div class="t3 pk teal" style="width:43px;height:43px"><img src="icons/send.png" alt="" draggable="false"></div>' +
       '<div style="flex:1"><div style="font-size:16px;font-weight:800">' + esc(x.requirementTitle || 'Brand brief') + '</div>' +
       '<div style="margin-top:2px;font-size:12px;color:#55616d">' + esc(x.bizName || 'Brand') + ' \u00B7 Sent ' + esc(agoStr(x.createdAt)) + '</div></div>' +
       '<div class="glass pill ' + (pd ? 'st-p' : 'st-w') + '">' + (pd ? 'Pending' : esc(x.status || '')) + '</div></div>' +
