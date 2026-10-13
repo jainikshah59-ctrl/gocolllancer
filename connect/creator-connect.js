@@ -102,23 +102,9 @@ function init() {
   wireEvents();
   initPullToRefresh();
   FB.onAuth(function (u) {
-    if (!u) {
-      teardown();
-      try { localStorage.removeItem('collancer_creator_auth'); } catch (e) {}
-      try { Collancer.go('login'); } catch (e) {}
-      return;
-    }
+    if (!u) { teardown(); try { Collancer.go('login'); } catch (e) {} return; }
     uid = u.uid;
-    try { localStorage.setItem('collancer_creator_auth', '1'); } catch (e) {}
-    try { localStorage.setItem('collancer_role', 'creator'); } catch (e) {}
-    try {
-      var curScr = document.querySelector('.scr.on');
-      if (!curScr || curScr.id === 's-login') {
-        var lastTab = null;
-        try { lastTab = localStorage.getItem('collancer_creator_tab'); } catch (e) {}
-        Collancer.go((lastTab && lastTab !== 'login') ? lastTab : 'home');
-      }
-    } catch (e) {}
+    try { Collancer.go('home'); } catch (e) {}
     afterLogin(u);
   });
 }
@@ -207,8 +193,6 @@ function doEmailAuth() {
   if (note) note.textContent = reg ? 'Creating your creator account\u2026' : 'Logging you in\u2026';
   (reg ? FB.registerEmail(email, pass) : FB.loginEmail(email, pass))
     .then(function (cred) {
-      try { localStorage.setItem('collancer_creator_auth', '1'); } catch (e) {}
-      try { localStorage.setItem('collancer_role', 'creator'); } catch (e) {}
       if (reg) return ensureCreatorDoc(cred.user, email);
     })
     .then(function () { if (note) note.textContent = ''; })
@@ -221,8 +205,6 @@ function doGoogle() {
     .then(function (res) {
       var u = res && res.user ? res.user : FB.user();
       if (!u) throw new Error('no-user');
-      try { localStorage.setItem('collancer_creator_auth', '1'); } catch (e) {}
-      try { localStorage.setItem('collancer_role', 'creator'); } catch (e) {}
       return ensureCreatorDoc(u, u.email || '').then(function () {
         if (note) note.textContent = '';
       });
@@ -297,18 +279,15 @@ function wireEvents() {
     if (!t || !t.closest) return;
     var q = function (s) { return t.closest(s); };
     if (q('#s-login #sb')) { e.stopPropagation(); e.preventDefault(); doEmailAuth(); return; }
-    if (q('#s-login .sbtn')) { e.stopPropagation(); e.preventDefault(); doGoogle(); return; }
+    var sbtn = q('#s-login .sbtn');
+    if (sbtn && !/phone/i.test(sbtn.textContent)) { e.stopPropagation(); e.preventDefault(); doGoogle(); return; }
+    // Phone button: let the data-toast handler show "opens in the app" message
     if (q('#s-profile .black.red')) {
       e.stopPropagation(); e.preventDefault();
-      try { localStorage.removeItem('collancer_creator_auth'); } catch (x) {}
-      try { localStorage.removeItem('collancer_role'); } catch (x) {}
-      FB.logout().then(function () {
-        try { Collancer.go('login'); } catch (x) {}
-        try { parent.postMessage('collancer:logged_out', '*'); } catch (x) {}
-      });
+      FB.logout().then(function () { try { Collancer.go('login'); } catch (x) {} });
       return;
     }
-    var igBtn = q('#s-profile button.black');
+    var igBtn = q('button.black');
     if (igBtn && /connect instagram/i.test(igBtn.textContent)) {
       e.stopPropagation(); e.preventDefault(); connectInstagram(); return;
     }
@@ -644,7 +623,7 @@ function paintRequirements() {
   if (cb) cb.textContent = items.length;
   list.innerHTML = items.map(function (r, i) {
     return '<div class="glass card" data-req="' + esc(r.id) + '">' +
-      '<div style="display:flex;gap:12.5px;align-items:center"><div class="t3 pk teal" style="width:50.5px;height:50.5px"><img src="icons/tag.png" alt="" draggable="false"></div>' +
+      '<div style="display:flex;gap:12.5px;align-items:center"><div class="t3 teal" style="width:50.5px;height:50.5px"><svg viewBox="0 0 24 24"><use href="#tag"/></svg></div>' +
       '<div style="flex:1"><div style="font-size:16.5px;font-weight:800">' + esc(r.title || 'Brand brief') + '</div>' +
       '<div style="margin-top:2.5px;font-size:12px;color:#55616d">' + esc(r.bizName || 'Brand') + ' \u00B7 ' + esc(agoStr(r.createdAt)) + '</div></div>' +
       (r.budget ? '<div class="bud">Budget<b>' + inr(r.budget) + '</b></div>' : '') + '</div>' +
@@ -685,7 +664,7 @@ function paintProposals() {
   var cb2 = $('#cb2', root); if (cb2) cb2.textContent = myOffers.length;
   list.innerHTML = myOffers.map(function (x) {
     var pd = x.status === 'pending';
-    return '<div class="glass card"><div style="display:flex;gap:12.5px;align-items:center"><div class="t3 pk teal" style="width:43px;height:43px"><img src="icons/send.png" alt="" draggable="false"></div>' +
+    return '<div class="glass card"><div style="display:flex;gap:12.5px;align-items:center"><div class="t3 teal" style="width:43px;height:43px"><svg viewBox="0 0 24 24"><use href="#send"/></svg></div>' +
       '<div style="flex:1"><div style="font-size:16px;font-weight:800">' + esc(x.requirementTitle || 'Brand brief') + '</div>' +
       '<div style="margin-top:2px;font-size:12px;color:#55616d">' + esc(x.bizName || 'Brand') + ' \u00B7 Sent ' + esc(agoStr(x.createdAt)) + '</div></div>' +
       '<div class="glass pill ' + (pd ? 'st-p' : 'st-w') + '">' + (pd ? 'Pending' : esc(x.status || '')) + '</div></div>' +
