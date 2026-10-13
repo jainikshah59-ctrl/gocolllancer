@@ -29,6 +29,19 @@ export default async function handler(req, res) {
   try { body = typeof req.body === 'string' ? JSON.parse(req.body) : (req.body || {}); }
   catch { return json(res, 400, { error: 'bad_json' }); }
 
+  // Require Firebase auth — bind customer.id to verified UID
+  let uid = null;
+  try {
+    const { getAdmin } = await import('../lib/firebaseAdmin.js');
+    const admin = getAdmin();
+    const idToken = body.idToken || req.headers.authorization?.replace('Bearer ', '');
+    if (!idToken) return json(res, 401, { error: 'auth_required' });
+    const decoded = await admin.auth().verifyIdToken(idToken);
+    uid = decoded.uid;
+  } catch (e) {
+    return json(res, 401, { error: 'invalid_token' });
+  }
+
   const amount = Number(body.amount);
   if (!Number.isFinite(amount) || amount <= 0 || amount > 1000000)
     return json(res, 400, { error: 'bad_amount' });
@@ -50,7 +63,7 @@ export default async function handler(req, res) {
         order_amount: Math.round(amount * 100) / 100,
         order_currency: 'INR',
         customer_details: {
-          customer_id: String(customer.id || 'guest').slice(0, 64),
+          customer_id: uid, // Use verified Firebase UID, not client-provided
           customer_email: String(customer.email || 'noreply@collancer.in').slice(0, 128),
           customer_phone: String(customer.phone || '9999999999').replace(/\D/g, '').slice(-10) || '9999999999',
         },
