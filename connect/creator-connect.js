@@ -451,10 +451,36 @@ function loadBookings() {
     window.CollancerBookings.onAction = function (booking, action) {
       if (!booking || !booking.id) return;
       var ref = DB.collection('bookings').doc(booking.id);
-      var patch = action === 'accept'
-        ? { status: 'Active', acceptedAt: FB.serverStamp(), acceptedByCreator: true, seenByCreator: true }
-        : { status: 'Cancelled', rejectedAt: FB.serverStamp(), rejectedByCreator: true, seenByCreator: true };
-      ref.update(patch).then(function () {
+      if (action === 'accept') {
+        var patch = { status: 'Active', acceptedAt: FB.serverStamp(), acceptedByCreator: true, seenByCreator: true };
+        ref.update(patch).then(notifyBiz).catch(function () { toast('Could not update booking. Please try again.'); });
+      } else {
+        // REJECT: atomic transaction — mark cancelled + record refund intent.
+        // The refund itself is finalized by the brand wallet / admin cron
+        // (see api/booking-deadlines.js); the deterministic ledger id makes
+        // retries idempotent.
+        DB.runTransaction(function (tx) {
+          return tx.get(ref).then(function (snap) {
+            var d = snap.data() || {};
+            var amt = Number(d.paidAmount || d.escrowAmount || 0);
+            var refundable = !d.barter && amt > 0 && !d.refundProcessed && d.status === 'Pending';
+            var p = { status: 'Cancelled', rejectedAt: FB.serverStamp(), rejectedByCreator: true, seenByCreator: true };
+            if (refundable) {
+              p.refundProcessed = false;
+              p.refundAmount = amt;
+              p.refundStatus = 'pending';
+              var ledgerRef = DB.collection('walletTransactions').doc('refund_' + booking.id);
+              tx.set(ledgerRef, {
+                bizId: d.bizId || '', bookingId: booking.id, type: 'refund',
+                amount: amt, createdAt: FB.serverStamp(),
+                note: 'Refund pending: creator declined booking',
+              }, { merge: true });
+            }
+            tx.update(ref, p);
+          });
+        }).then(notifyBiz).catch(function () { toast('Could not update booking. Please try again.'); });
+      }
+      function notifyBiz() {
         if (booking._bizId) {
           DB.collection('bizNotifs').add({
             bizId: booking._bizId, type: action === 'accept' ? 'booking_accepted' : 'booking_rejected',
@@ -464,7 +490,7 @@ function loadBookings() {
             bookingId: booking.id, read: false, createdAt: FB.serverStamp(),
           }).catch(function () {});
         }
-      }).catch(function () { toast('Could not update booking. Please try again.'); });
+      }
     };
   } catch (e) {}
 }
@@ -796,7 +822,7 @@ function aiSend(fromVoice) {
     });
   }).catch(function () {
     if (typing) typing.remove();
-    renderAiBot('Something went wrong. Please try again.');
+    renderAiBot('AI is having trouble right now. Please try again in a moment.');
   });
 }
 function aiVoiceDone() {
