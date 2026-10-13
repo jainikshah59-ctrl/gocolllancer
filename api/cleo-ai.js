@@ -114,6 +114,9 @@ export default async function handler(req, res) {
     if (req.method !== 'POST') {
       return res.status(200).json({ ...safeFallback(''), error: 'Use POST.' });
     }
+    // Shared rate limit: 60 AI requests per minute per IP
+    const { rateLimit } = await import('../lib/rateLimit.js');
+    if (!rateLimit(req, res, { max: 60, windowMs: 60000, key: 'cleo-ai' })) return;
     let body = req.body;
     if (typeof body === 'string') {
       try { body = JSON.parse(body); } catch { body = {}; }
