@@ -4,18 +4,18 @@
  * 2. PendingCompletion bookings past reviewDeadline → auto-approve + payout creator
  */
 import { getAdmin } from '../lib/firebaseAdmin.js';
+import { FieldValue } from 'firebase-admin/firestore';
 
 export default async function handler(req, res) {
-  // Auth: when CRON_SECRET is configured on the project, Vercel Cron sends
-  // `Authorization: Bearer <CRON_SECRET>` automatically on every scheduled
-  // call; direct unauthenticated hits are rejected. If the secret is not
-  // configured yet, behavior is unchanged (allow), so nothing breaks until
-  // CRON_SECRET is set in the Vercel environment.
+  // Auth: CRON_SECRET is MANDATORY (fail closed). The cron must send either
+  // `Authorization: Bearer <CRON_SECRET>` (Vercel Cron does this automatically)
+  // or the `x-cron-secret` header / `cron_secret` query param.
   const secret = process.env.CRON_SECRET;
-  if (secret) {
-    const got = String(req.headers['authorization'] || '');
-    if (got !== 'Bearer ' + secret) return res.status(401).json({ ok: false });
-  }
+  const gotAuth = String(req.headers['authorization'] || '');
+  const gotHeader = String(req.headers['x-cron-secret'] || '');
+  const gotQuery = String((req.query && req.query.cron_secret) || '');
+  const okSecret = secret && (gotAuth === 'Bearer ' + secret || gotHeader === secret || gotQuery === secret);
+  if (!okSecret) return res.status(401).json({ ok: false, err: 'unauthorized' });
   if (req.method !== 'POST' && req.method !== 'GET') {
     return res.status(405).json({ ok: false });
   }
@@ -36,26 +36,68 @@ export default async function handler(req, res) {
       const b = doc.data();
       if (b.autoCancelled) continue;
       const batch = db.batch();
-      // Refund brand wallet (atomic increment to prevent race conditions)
+      // Refund brand wallet (atomic increment to prevent race conditions).
+      // Guard: the business doc must exist before we touch the wallet.
+      var refunded = false;
       if (b.bizId && b.paidAmount > 0 && !b.barter) {
         const bizRef = db.collection('businesses').doc(b.bizId);
-        const { FieldValue } = require('firebase-admin/firestore');
-        batch.update(bizRef, { walletBalance: FieldValue.increment(b.paidAmount) });
-        // Ledger entry
-        const ledgerRef = db.collection('wallet_ledger').doc();
-        batch.set(ledgerRef, {
-          bizId: b.bizId, bookingId: doc.id, type: 'refund_auto_cancel',
-          amount: b.paidAmount, createdAt: now,
-          note: 'Auto-refund: creator did not accept within 72h',
-        });
+        const bizSnap = await bizRef.get();
+        if (bizSnap.exists) {
+          batch.update(bizRef, { walletBalance: FieldValue.increment(b.paidAmount) });
+          // Ledger entry — deterministic id `refund_{bookingId}` so a retried
+          // cron run can never double-refund (idempotency guard).
+          const ledgerRef = db.collection('wallet_ledger').doc('refund_' + doc.id);
+          batch.set(ledgerRef, {
+            bizId: b.bizId, bookingId: doc.id, type: 'refund_auto_cancel',
+            amount: b.paidAmount, createdAt: now,
+            note: 'Auto-refund: creator did not accept within 72h',
+          }, { merge: true });
+          refunded = true;
+        }
       }
       batch.update(doc.ref, {
         status: 'Cancelled', autoCancelled: true,
         cancelReason: 'Creator did not accept within 72 hours (auto-cancelled)',
+        refundProcessed: refunded,
+        refundedAt: refunded ? now : null,
         updatedAt: now,
       });
       await batch.commit();
       results.cancelled.push(doc.id);
+    }
+
+    // 1b. Finalize creator-reject refunds (bookings cancelled by creator with
+    // a pending refund intent). Runs as admin; idempotent via refund_{id}.
+    const rejectSnap = await db.collection('bookings')
+      .where('status', '==', 'Cancelled')
+      .where('refundProcessed', '==', false)
+      .limit(50)
+      .get();
+
+    for (const doc of rejectSnap.docs) {
+      const b = doc.data();
+      const amt = Number(b.refundAmount || b.paidAmount || 0);
+      if (!(b.bizId && amt > 0 && !b.barter)) {
+        // Nothing refundable — mark processed so we don't loop forever.
+        await doc.ref.update({ refundProcessed: true, updatedAt: now });
+        continue;
+      }
+      const bizRef = db.collection('businesses').doc(b.bizId);
+      const bizSnap = await bizRef.get();
+      if (!bizSnap.exists) continue; // retry next run
+      const batch = db.batch();
+      batch.update(bizRef, { walletBalance: FieldValue.increment(amt) });
+      const ledgerRef = db.collection('wallet_ledger').doc('refund_' + doc.id);
+      batch.set(ledgerRef, {
+        bizId: b.bizId, bookingId: doc.id, type: 'refund_creator_reject',
+        amount: amt, createdAt: now,
+        note: 'Refund: creator declined booking',
+      }, { merge: true });
+      batch.update(doc.ref, {
+        refundProcessed: true, refundStatus: 'completed', refundedAt: now, updatedAt: now,
+      });
+      await batch.commit();
+      results.cancelled.push(doc.id + ':refunded');
     }
 
     // 2. Auto-approve expired PendingCompletion bookings
