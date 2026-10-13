@@ -625,7 +625,7 @@ function paintRequirements() {
   if (!list) {
     list = document.createElement('div');
     list.id = 'ccon-reqs';
-    list.style.cssText = 'display:flex;flex-direction:column;gap:8px;margin-top:8px;';
+    list.style.cssText = 'display:flex;flex-direction:column;gap:12.5px;margin-top:12.5px;';
     if (demo && demo.parentNode) demo.parentNode.insertBefore(list, demo.nextSibling);
   }
   if (demo) demo.style.display = 'none'; // demo brief replaced by live data
@@ -643,16 +643,16 @@ function paintRequirements() {
   var cb = root.querySelector('.panel#p1 .sec .glass.cb, #p1 .sec .glass.cb');
   if (cb) cb.textContent = items.length;
   list.innerHTML = items.map(function (r, i) {
-    return '<div class="glass card" data-req="' + esc(r.id) + '" style="padding:10px 11px;border-radius:18px">' +
-      '<div style="display:flex;gap:9px;align-items:center"><div class="t3 pk teal" style="width:36px;height:36px;flex:none"><img src="icons/tag.png" alt="" draggable="false"></div>' +
-      '<div style="flex:1;min-width:0"><div style="font-size:14.5px;font-weight:800;line-height:1.2;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + esc(r.title || 'Brand brief') + '</div>' +
-      '<div style="margin-top:1px;font-size:11px;color:#55616d">' + esc(r.bizName || 'Brand') + ' \u00B7 ' + esc(agoStr(r.createdAt)) + '</div></div>' +
-      (r.budget ? '<div class="bud" style="font-size:10.5px">Budget<b style="font-size:15px;line-height:1">' + inr(r.budget) + '</b></div>' : '') + '</div>' +
-      (r.description ? '<div style="margin-top:6px;font-size:12px;line-height:1.35;color:#3b4652;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden">' + esc(String(r.description).slice(0, 120)) + '</div>' : '') +
-      '<div style="display:flex;gap:5px;margin-top:7px;flex-wrap:wrap">' +
-      (r.category ? '<div class="glass pill t" style="padding:3px 8px;font-size:10.5px">' + esc(r.category) + '</div>' : '') +
-      (r.platform ? '<div class="glass pill" style="padding:3px 8px;font-size:10.5px">' + esc(r.platform) + '</div>' : '') + '</div>' +
-      '<button class="black" data-reqbtn="' + esc(r.id) + '" style="width:100%;height:36px;margin-top:8px;border-radius:18px;font-size:13px"><svg class="ico" style="stroke:#fff;width:14px;height:14px"><use href="#send"/></svg>Send proposal</button></div>';
+    return '<div class="glass card" data-req="' + esc(r.id) + '">' +
+      '<div style="display:flex;gap:12.5px;align-items:center"><div class="t3 pk teal" style="width:50.5px;height:50.5px"><img src="icons/tag.png" alt="" draggable="false"></div>' +
+      '<div style="flex:1"><div style="font-size:16.5px;font-weight:800">' + esc(r.title || 'Brand brief') + '</div>' +
+      '<div style="margin-top:2.5px;font-size:12px;color:#55616d">' + esc(r.bizName || 'Brand') + ' \u00B7 ' + esc(agoStr(r.createdAt)) + '</div></div>' +
+      (r.budget ? '<div class="bud">Budget<b>' + inr(r.budget) + '</b></div>' : '') + '</div>' +
+      (r.description ? '<div style="margin-top:10px;font-size:13px;line-height:1.45;color:#3b4652">' + esc(String(r.description).slice(0, 160)) + '</div>' : '') +
+      '<div style="display:flex;gap:7px;margin-top:12px;flex-wrap:wrap">' +
+      (r.category ? '<div class="glass pill t">' + esc(r.category) + '</div>' : '') +
+      (r.platform ? '<div class="glass pill">' + esc(r.platform) + '</div>' : '') + '</div>' +
+      '<button class="black" data-reqbtn="' + esc(r.id) + '" style="width:100%;height:45px;margin-top:14.5px;border-radius:22.5px"><svg class="ico" style="stroke:#fff;width:17px;height:17px"><use href="#send"/></svg>Send proposal</button></div>';
   }).join('');
   $all('[data-reqbtn]', list).forEach(function (b) {
     b.addEventListener('click', function () {
@@ -685,15 +685,15 @@ function paintProposals() {
   var cb2 = $('#cb2', root); if (cb2) cb2.textContent = myOffers.length;
   list.innerHTML = myOffers.map(function (x) {
     var pd = x.status === 'pending';
-    return '<div class="glass card" style="padding:10px 11px;border-radius:18px"><div style="display:flex;gap:9px;align-items:center"><div class="t3 pk teal" style="width:34px;height:34px;flex:none"><img src="icons/send.png" alt="" draggable="false"></div>' +
-      '<div style="flex:1;min-width:0"><div style="font-size:14px;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + esc(x.requirementTitle || 'Brand brief') + '</div>' +
-      '<div style="margin-top:1px;font-size:11px;color:#55616d">' + esc(x.bizName || 'Brand') + ' \u00B7 ' + esc(agoStr(x.createdAt)) + '</div></div>' +
-      '<div class="glass pill ' + (pd ? 'st-p' : 'st-w') + '" style="font-size:10.5px;padding:3px 8px;white-space:nowrap">' + (pd ? 'Pending' : esc(x.status || '')) + '</div></div>' +
-      '<div style="height:1px;background:rgba(15,40,60,.08);margin:7px 0"></div>' +
-      '<div class="prow"><span style="font-size:12px">Your proposed price</span><b style="font-size:16px">' + inr(x.price) + '</b></div>' +
-      (x.message ? '<div style="margin-top:6px;font-size:12px;line-height:1.35;color:#3b4652;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden">' + esc(x.message) + '</div>' : '') +
-      (x.timeline ? '<div style="margin-top:3px;font-size:11px;color:#55616d">Timeline: ' + esc(x.timeline) + '</div>' : '') +
-      (pd ? '<button class="wd" data-offer="' + esc(x.id) + '" style="font-size:12px;margin-top:7px">Withdraw proposal</button>' : '') + '</div>';
+    return '<div class="glass card"><div style="display:flex;gap:12.5px;align-items:center"><div class="t3 pk teal" style="width:43px;height:43px"><img src="icons/send.png" alt="" draggable="false"></div>' +
+      '<div style="flex:1"><div style="font-size:16px;font-weight:800">' + esc(x.requirementTitle || 'Brand brief') + '</div>' +
+      '<div style="margin-top:2px;font-size:12px;color:#55616d">' + esc(x.bizName || 'Brand') + ' \u00B7 Sent ' + esc(agoStr(x.createdAt)) + '</div></div>' +
+      '<div class="glass pill ' + (pd ? 'st-p' : 'st-w') + '">' + (pd ? 'Pending' : esc(x.status || '')) + '</div></div>' +
+      '<div style="height:1px;background:rgba(15,40,60,.08);margin:12.5px 0"></div>' +
+      '<div class="prow"><span>Your proposed price</span><b>' + inr(x.price) + '</b></div>' +
+      '<div style="margin-top:11px;font-size:13px;line-height:1.4;color:#3b4652">' + esc(x.message || '') + '</div>' +
+      (x.timeline ? '<div style="margin-top:5.5px;font-size:12px;color:#55616d">Timeline: ' + esc(x.timeline) + '</div>' : '') +
+      (pd ? '<button class="wd" data-offer="' + esc(x.id) + '">Withdraw proposal</button>' : '') + '</div>';
   }).join('');
 }
 function sendProposal() {
