@@ -31,6 +31,18 @@ export default async function handler(req, res) {
   const orderId = String(body.order_id || '').trim();
   if (!orderId) return json(res, 400, { error: 'missing_order_id' });
 
+  // Require Firebase auth — this endpoint reveals order status and must not
+  // be an open oracle for arbitrary order IDs.
+  try {
+    const { getAdmin } = await import('../lib/firebaseAdmin.js');
+    const admin = getAdmin();
+    const idToken = body.idToken || (req.headers.authorization || '').replace(/^Bearer\s+/i, '');
+    if (!idToken) return json(res, 401, { error: 'auth_required' });
+    await admin.auth().verifyIdToken(idToken);
+  } catch (e) {
+    return json(res, 401, { error: 'invalid_token' });
+  }
+
   try {
     const cfRes = await fetch(base(env) + '/orders/' + encodeURIComponent(orderId), {
       headers: {
