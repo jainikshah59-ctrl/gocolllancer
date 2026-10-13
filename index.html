@@ -1,7 +1,14 @@
 <!DOCTYPE html>
 <html lang="en"><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
-<title>Collancer</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Collancer — Where Influence Meets Industry</title>
+<meta name="description" content="Collancer is India's creator-brand collaboration platform. Discover creators, book campaigns, and grow your brand with authentic influencer partnerships.">
+<meta property="og:title" content="Collancer — Where Influence Meets Industry">
+<meta property="og:description" content="Discover creators, book campaigns, and grow your brand with authentic influencer partnerships.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://gocolllancer.vercel.app/">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="canonical" href="https://gocolllancer.vercel.app/">
 <style>
 :root{--ink:#0b1217;--mut:#55616d;--teal:#0e7490}
 *{box-sizing:border-box}
@@ -63,39 +70,7 @@ h1{margin:0;font-size:34px;line-height:1.1;font-weight:800;letter-spacing:-1px}
 @media (max-width:380px){h1{font-size:30px}.rt span{font-size:13px}}
 .appf{position:fixed;inset:0;width:100%;height:100%;border:0;background:#f4fafc;z-index:50}.appf[hidden]{display:none}
 @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
-/* ===== mobile fit layer (shell / role picker) ===== */
-html{-webkit-text-size-adjust:100%;text-size-adjust:100%}
-.wrap{min-height:100vh;min-height:100dvh}
-@media (max-width:480px){
-  .wrap{padding-left:14px;padding-right:14px}
-}
-/* small or short phones: compact hero + cards so the CTA stays on screen */
-@media (max-width:480px) and (max-height:760px),(max-width:360px){
-  .wrap{padding-top:calc(26px + env(safe-area-inset-top,0px));padding-bottom:calc(16px + env(safe-area-inset-bottom,0px))}
-  .brand{margin-bottom:18px}
-  .logo{width:60px;height:60px;margin-bottom:12px}
-  h1{font-size:29px}
-  .tag{margin-top:8px;font-size:11.5px;letter-spacing:1.3px}
-  .lede{margin-top:8px;font-size:14.5px;line-height:1.45}
-  .roles{gap:10px}
-  .role{padding:12px 13px;gap:12px;border-radius:26px}
-  .role .t3{width:48px;height:48px}
-  .rt b{font-size:17px}
-  .rt span{margin-top:2px;font-size:12.5px;line-height:1.35}
-  .chk{width:26px;height:26px}
-  .spacer{min-height:12px}
-  .cta{margin-top:14px}
-  .black{height:50px;border-radius:25px;font-size:15px}
-  .sec{margin-top:10px;font-size:12.5px}
-}
-@media (max-width:340px){
-  h1{font-size:26px}
-  .tag{letter-spacing:.8px;font-size:11px}
-  .role .t3{width:42px;height:42px}
-  .rt b{font-size:16px}
-  .rt span{font-size:12px}
-}
-:is(#_x,body) .t3.pk{background:none!important;box-shadow:none!important;border:0!important;overflow:visible}:is(#_x,body) .t3.pk::after{display:none!important}.t3.pk>img{width:100%;height:100%;object-fit:contain;display:block;position:relative;z-index:1;pointer-events:none}:is(#_x,body) .pkb{background:none!important;box-shadow:none!important;border:0!important;padding:0!important;overflow:visible;backdrop-filter:none!important;-webkit-backdrop-filter:none!important}:is(#_x,body) .pkb::before,:is(#_x,body) .pkb::after{display:none!important}.pkb>img{width:100%;height:100%;object-fit:contain;display:block;pointer-events:none}.chk>img{display:none}.role[aria-checked=true] .chk>img{display:block;width:100%;height:100%;object-fit:contain}:is(#_x,body) .role[aria-checked=true] .chk{background:none!important;box-shadow:none!important}</style></head><body>
+</style></head><body>
 <svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
 <symbol id="spark" viewBox="0 0 24 24"><path d="M11 3l1.8 5.2L18 10l-5.2 1.8L11 17l-1.8-5.2L4 10l5.2-1.8zM19 15v4M17 17h4"/></symbol>
 <symbol id="bld" viewBox="0 0 24 24"><path d="M5 21V5a2 2 0 012-2h7a2 2 0 012 2v16M16 10h2a1 1 0 011 1v10M3 21h18M9 7h3M9 11h3M9 15h3"/></symbol>
@@ -113,14 +88,14 @@ html{-webkit-text-size-adjust:100%;text-size-adjust:100%}
 
   <div class="roles" role="radiogroup" aria-label="Choose your role">
     <button type="button" class="role" role="radio" aria-checked="false" data-role="creator">
-      <div class="t3 pk purp"><img src="icons/sparkles.png" alt="" draggable="false"></div>
+      <div class="t3 purp"><svg viewBox="0 0 24 24"><use href="#spark"/></svg></div>
       <div class="rt"><b>I am a Creator</b><span>Get discovered, manage bookings, track earnings and grow with Collancer AI.</span></div>
-      <div class="chk"><img src="icons/check.png" alt="" draggable="false"></div>
+      <div class="chk"><svg class="ico"><use href="#ok"/></svg></div>
     </button>
     <button type="button" class="role" role="radio" aria-checked="false" data-role="brand">
-      <div class="t3 pk orng"><img src="icons/building.png" alt="" draggable="false"></div>
+      <div class="t3 orng"><svg viewBox="0 0 24 24"><use href="#bld"/></svg></div>
       <div class="rt"><b>I am a Brand</b><span>Discover verified creators, run campaigns, and manage collaborations.</span></div>
-      <div class="chk"><img src="icons/check.png" alt="" draggable="false"></div>
+      <div class="chk"><svg class="ico"><use href="#ok"/></svg></div>
     </button>
   </div>
 
@@ -1055,7 +1030,7 @@ input,select,textarea,button{font-family:inherit}
 #s-ai .ah .ttl{flex:1;min-width:0}
 #s-ai .ah h1{margin:0;font-size:20px;font-weight:800;letter-spacing:-.4px}
 #s-ai .ah p{margin:2px 0 0;font-size:12.5px;line-height:1.3;color:#55616d}
-#s-ai .rb{width:42px;height:42px;border-radius:50%;display:flex;align-items:center;justify-content:center;cursor:pointer;border:0;padding:0;flex:none;transition:transform .3s cubic-bezier(.3,1.5,.5,1)}
+#s-ai .rb{width:44px;height:44px;border-radius:50%;display:flex;align-items:center;justify-content:center;cursor:pointer;border:0;padding:0;flex:none;transition:transform .3s cubic-bezier(.3,1.5,.5,1)}
 #s-ai .rb:hover{transform:scale(1.06)}
 #s-ai .rb:active{transform:scale(.94)}
 #s-ai .msgs{position:absolute;top:84px;bottom:100px;left:0;right:0;overflow-y:auto;padding:12px 16px 18px;display:flex;flex-direction:column;gap:12px;scrollbar-width:none}
@@ -1063,7 +1038,7 @@ input,select,textarea,button{font-family:inherit}
 #s-ai .u{align-self:flex-end;max-width:80%;padding:12px 18px;border-radius:22px;color:#fff;font-size:15px;font-weight:600;background:linear-gradient(180deg,#3a3d44 0,#16181c 46%,#000 100%);box-shadow:0 0 0 1px rgba(255,255,255,.55),0 0 0 2px rgba(0,0,0,.9),0 12px 18px -10px rgba(0,0,0,.55),inset 0 1.5px 0 rgba(255,255,255,.45);position:relative;animation:rise_s-ai .5s cubic-bezier(.2,.9,.3,1) both}
 #s-ai .u::after,#s-ai .field2::after{content:"";position:absolute;inset:-1px;border-radius:inherit;padding:2.5px;background:linear-gradient(145deg,#ffffff 0,#dcdcdc 16%,#a9a9a9 40%,#f4f4f4 60%,#bebebe 82%,#e6e6e6 100%);-webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;mask:linear-gradient(#000 0 0) content-box exclude,linear-gradient(#000 0 0);pointer-events:none}
 #s-ai .a{align-self:flex-start;max-width:92%;padding:16px 18px;border-radius:26px;font-size:15.5px;line-height:1.5;color:#1c242c;animation:rise_s-ai .5s cubic-bezier(.2,.9,.3,1) both}
-#s-ai .spk{align-self:flex-start;width:42px;height:42px;border-radius:50%;display:flex;align-items:center;justify-content:center;cursor:pointer;margin-top:-4px}
+#s-ai .spk{align-self:flex-start;width:44px;height:44px;border-radius:50%;display:flex;align-items:center;justify-content:center;cursor:pointer;margin-top:-4px}
 #s-ai .spk.on .ico{stroke:#0891b2!important}
 #s-ai .dots{display:flex;gap:5px;padding:4px 2px}
 #s-ai .dots i{width:8px;height:8px;border-radius:50%;background:#8793a0;animation:bl_s-ai 1s infinite}
@@ -1074,7 +1049,7 @@ input,select,textarea,button{font-family:inherit}
 #s-ai .inp input{flex:1;min-width:0;border:0;outline:0;background:transparent;font:500 15.5px inherit;font-family:inherit;color:#0b1217}
 #s-ai .inp input::placeholder{color:#8793a0}
 #s-ai .wv .ico{stroke:#0891b2!important}
-#s-ai .sendc{width:46px;height:46px;border-radius:50%;padding:0;flex:none;opacity:.35;transition:opacity .3s,transform .3s cubic-bezier(.3,1.5,.5,1)}
+#s-ai .sendc{width:44px;height:44px;border-radius:50%;padding:0;flex:none;opacity:.35;transition:opacity .3s,transform .3s cubic-bezier(.3,1.5,.5,1)}
 #s-ai .sendc.rdy{opacity:1}
 #s-ai .voice{position:absolute;inset:0;background:#fff;z-index:8;display:none;flex-direction:column;align-items:center;animation:rise_s-ai .5s cubic-bezier(.2,.9,.3,1) both}
 #s-ai.v .voice{display:flex}
@@ -1179,7 +1154,7 @@ input,select,textarea,button{font-family:inherit}
 #s-login .lg>.glass{margin-top:10px!important;padding:12px 14px!important}
 #s-login .lg label{margin-top:9px!important;margin-bottom:5px!important}
 #s-login .field{height:42px}
-#s-login .black#sb{height:46px!important;margin-top:12px!important}
+#s-login .black#sb{height:44px!important;margin-top:12px!important}
 #s-login .sbtn{height:42px}
 #s-login #note{margin-top:8px!important}
 #s-login .lg>.glass>div[style*="margin"]{margin-top:10px!important;margin-bottom:10px!important}
@@ -1192,7 +1167,7 @@ input,select,textarea,button{font-family:inherit}
 #s-market .sheet .xbtn{top:5px;right:12px}
 #s-market .sheet::-webkit-scrollbar{display:none}
 
-:is(#_x,body) .t3.pk{background:none!important;box-shadow:none!important;border:0!important;overflow:visible}:is(#_x,body) .t3.pk::after{display:none!important}.t3.pk>img{width:100%;height:100%;object-fit:contain;display:block;position:relative;z-index:1;pointer-events:none}</style><style id="bk-style">
+</style><style id="bk-style">
 /* ===== Booking request cards + full-screen detail (creator side) ===== */
 #s-bookings .bkl{display:flex;flex-direction:column;gap:12.5px;padding-bottom:6px;flex:none}
 #s-bookings .bk-card{display:block;position:relative;border-radius:24px;padding:12px;cursor:pointer;text-align:left;transition:transform .35s cubic-bezier(.3,1.5,.5,1);animation:rise_s-bookings .5s cubic-bezier(.2,.9,.3,1) both}
@@ -1280,73 +1255,7 @@ input,select,textarea,button{font-family:inherit}
 #nav .bk-badge{position:absolute;top:1px;left:calc(50% + 6px);min-width:17px;height:17px;padding:0 4px;border-radius:9px;display:none;align-items:center;justify-content:center;font:800 10px/1 -apple-system,BlinkMacSystemFont,'Inter',system-ui,sans-serif;color:#fff;background:linear-gradient(180deg,#fb7185,#e11d48);box-shadow:0 0 0 2px #fff,0 4px 8px -2px rgba(225,29,72,.6);z-index:3;font-style:normal}
 #nav .bk-badge.on{display:flex}
 @media (prefers-reduced-motion:reduce){#s-bookings .bkd.on,#s-bookings .bk-card{animation:none}}
-:is(#_x,body) .t3.pk{background:none!important;box-shadow:none!important;border:0!important;overflow:visible}:is(#_x,body) .t3.pk::after{display:none!important}.t3.pk>img{width:100%;height:100%;object-fit:contain;display:block;position:relative;z-index:1;pointer-events:none}</style>
-<style id="mfit">
-/* ===== mobile fit layer (creator) ===== */
-html{-webkit-text-size-adjust:100%;text-size-adjust:100%}
-/* login tagline: scale its tracking with the screen so it never touches the edges */
-@media (max-width:480px){
-  #s-login .lg>div:first-child>div:nth-of-type(2){letter-spacing:clamp(1.2px,.55vw,2.6px)!important;font-size:clamp(10px,3vw,11.5px)!important;text-align:center}
-}
-/* tall small phones: size the login title to the screen */
-@media (max-width:480px) and (min-height:721px){
-  #s-login h1{font-size:clamp(23px,7.2vw,29px)!important}
-}
-/* "Switch role" pill: smaller so it never collides with the logo */
-@media (max-width:400px){
-  body #cl-sw{height:32px;top:calc(8px + env(safe-area-inset-top,0px));left:10px;padding:0 11px 0 8px;gap:4px;font-size:12.5px;border-radius:16px}
-  body #cl-sw svg{width:14px;height:14px}
-}
-/* AI header: long subtitle must not spill into the chat */
-#s-ai .ah .ttl{min-width:0}
-#s-ai .ah .ttl h1,#s-ai .ah .ttl p{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-/* small phones: stop tab labels wrapping */
-@media (max-width:360px){
-  #s-profile .seg,#s-tools .seg{gap:5px;padding:5px}
-  #s-profile .seg div,#s-tools .seg div{font-size:11px;white-space:nowrap;letter-spacing:-.01em}
-  #s-market .seg div{font-size:12.5px;gap:5px;white-space:nowrap}
-}
-
-/* ===== compact sizing: Market / Bookings / Earnings / Profile ===== */
-@media (max-width:480px){
-  /* screen headers */
-  #s-market .head,#s-bookings .bh,#s-earnings .bh,#s-profile .hdr{padding:10px 12px 4px!important}
-  #s-market .head h1,#s-bookings .bh h1,#s-earnings .bh h1,#s-profile .hdr h1{font-size:19px!important;line-height:1.15!important}
-  #s-market .head p,#s-bookings .bh p,#s-earnings .bh p,#s-profile .hdr p{font-size:11.5px!important}
-  #s-market .body,#s-profile .body{padding:8px 10px!important;gap:10px!important}
-  /* cards */
-  #s-market .glass.card,#s-bookings .glass.card,#s-earnings .glass.card,#s-profile .glass.card{padding:11px!important;border-radius:20px!important}
-  /* buttons */
-  #s-market button.black,#s-bookings button.black,#s-earnings button.black,#s-profile button.black{height:40px!important;min-height:0!important;border-radius:20px!important;font-size:13.5px!important}
-  /* tab switchers */
-  #s-market #seg,#s-earnings #tb,#s-profile #seg,#s-bookings .glass.fw{padding:4px!important;border-radius:22px!important}
-  #s-market #seg>div,#s-earnings #tb>div{padding:7px 0!important;font-size:12.5px!important;border-radius:18px!important}
-  #s-profile #seg>div{padding:6px 0!important;font-size:11px!important;border-radius:18px!important;gap:3px!important}
-  #s-profile #seg>div .t3{width:24px!important;height:24px!important}
-  /* chips + search */
-  #s-market .chip,#s-bookings .chip{height:28px!important;padding:0 11px!important;font-size:12px!important;border-radius:14px!important}
-  #s-bookings #fs{padding:4px 7px!important}
-  #s-market .search{height:38px!important;border-radius:19px!important;font-size:13px!important}
-  /* Market brief card + section heading */
-  #s-market .sec{font-size:15px!important}
-  #s-market #brief{padding:10px!important}
-  /* Bookings empty state */
-  #s-bookings #ec{padding:20px 14px!important;border-radius:22px!important}
-  #s-bookings #ec .bob{width:56px!important;height:56px!important}
-  #s-bookings #ec .bob svg{width:30px!important;height:30px!important}
-  #s-bookings #ep{font-size:12px!important}
-  /* Earnings */
-  #s-earnings .bal{padding:11px!important;border-radius:20px!important}
-  #s-earnings #bal.v{font-size:24px!important}
-  #s-earnings .sg{gap:8px!important}
-  #s-earnings .sc{padding:8px!important;border-radius:16px!important;gap:8px!important}
-  #s-earnings .sc .t3{width:28px!important;height:28px!important}
-  #s-earnings .nt{padding:10px 12px!important;font-size:11.5px!important;border-radius:16px!important}
-  /* Profile */
-  #s-profile .f.ft{padding:8px 11px!important;font-size:13px!important;border-radius:15px!important}
-  #s-profile .f.ta{min-height:76px!important}
-}
-:is(#_x,body) .t3.pk{background:none!important;box-shadow:none!important;border:0!important;overflow:visible}:is(#_x,body) .t3.pk::after{display:none!important}.t3.pk>img{width:100%;height:100%;object-fit:contain;display:block;position:relative;z-index:1;pointer-events:none}</style>
+</style>
 </head><body>
 <svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs><symbol id="bell" viewBox="0 0 24 24"><path d="M6 16v-5a6 6 0 1112 0v5l1.5 2h-15zM10 21h4"/></symbol><symbol id="menu" viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/></symbol><symbol id="srch" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></symbol><symbol id="tag" viewBox="0 0 24 24"><path d="M3 12V4h8l10 10-8 8z"/><circle cx="7.5" cy="8.5" r="1"/></symbol><symbol id="send" viewBox="0 0 24 24"><path d="M21 3L3 11l7 3 3 7z"/></symbol><symbol id="clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></symbol><symbol id="home" viewBox="0 0 24 24"><path d="M4 11l8-7 8 7v9a1 1 0 01-1 1h-4v-6h-6v6H5a1 1 0 01-1-1z"/></symbol><symbol id="shop" viewBox="0 0 24 24"><path d="M4 9l1.5-5h13L20 9M4 9v11h16V9M4 9h16M9 20v-6h6v6"/></symbol><symbol id="cal" viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="15" rx="3"/><path d="M8 3v4M16 3v4M4 10h16M9 15l2 2 4-4"/></symbol><symbol id="rs" viewBox="0 0 24 24"><path d="M7 4.5h10M7 9h10M10 4.5a4.25 4.25 0 010 8.5H7l7.5 7"/></symbol><symbol id="usr" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0116 0"/></symbol><symbol id="tool" viewBox="0 0 24 24"><path d="M5 8h14a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2v-8a2 2 0 012-2zM9 8V6a2 2 0 012-2h2a2 2 0 012 2v2M3 13h18M11 13v2h2v-2"/></symbol><symbol id="doc" viewBox="0 0 24 24"><path d="M7 3h7l5 5v13H7z"/><path d="M14 3v5h5M10 13h6M10 17h6"/></symbol><symbol id="x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></symbol><symbol id="ok" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M8 12.5l2.7 2.7L16 9.5"/></symbol><symbol id="wallet" viewBox="0 0 24 24"><path d="M4 7a2 2 0 012-2h11v3M4 7v10a2 2 0 002 2h13a1 1 0 001-1V9a1 1 0 00-1-1H6a2 2 0 01-2-2zM16 13.5h.01"/></symbol><symbol id="hg" viewBox="0 0 24 24"><path d="M7 3h10M7 21h10M8 3c0 5 4 6 4 9s-4 4-4 9M16 3c0 5-4 6-4 9s4 4 4 9"/></symbol><symbol id="lock" viewBox="0 0 24 24"><rect x="4" y="10" width="16" height="11" rx="3"/><path d="M8 10V7a4 4 0 018 0v3"/></symbol><symbol id="ph" viewBox="0 0 24 24"><rect x="7" y="3" width="10" height="18" rx="2.5"/><path d="M11 18h2"/></symbol><symbol id="bank" viewBox="0 0 24 24"><path d="M3 10l9-6 9 6M5 10v8M9.5 10v8M14.5 10v8M19 10v8M3 21h18"/></symbol><symbol id="back" viewBox="0 0 24 24"><path d="M19 12H5M11 6l-6 6 6 6"/></symbol><symbol id="plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol><symbol id="spark" viewBox="0 0 24 24"><path d="M11 3l1.8 5.2L18 10l-5.2 1.8L11 17l-1.8-5.2L4 10l5.2-1.8zM19 15v4M17 17h4"/></symbol><symbol id="spk" viewBox="0 0 24 24"><path d="M4 9v6h4l5 4V5L8 9zM16.5 9a4 4 0 010 6M19 7a7.5 7.5 0 010 10"/></symbol><symbol id="mute" viewBox="0 0 24 24"><path d="M4 9v6h4l5 4V5L8 9zM17 9l5 6M22 9l-5 6"/></symbol><symbol id="wave" viewBox="0 0 24 24"><path d="M5 9v6M9 5v14M13 8v8M17 10v4M21 11v2"/></symbol><symbol id="up" viewBox="0 0 24 24"><path d="M12 19V5M6 11l6-6 6 6"/></symbol><symbol id="mic" viewBox="0 0 24 24"><path d="M12 3a3 3 0 00-3 3v6a3 3 0 006 0V6a3 3 0 00-3-3zM6 11a6 6 0 0012 0M12 17v4"/></symbol><symbol id="gear" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 00.3 1.8l.1.1a2 2 0 11-2.8 2.8l-.1-.1a1.7 1.7 0 00-1.8-.3 1.7 1.7 0 00-1 1.5V21a2 2 0 11-4 0v-.1a1.7 1.7 0 00-1.1-1.5 1.7 1.7 0 00-1.8.3l-.1.1a2 2 0 11-2.8-2.8l.1-.1a1.7 1.7 0 00.3-1.8 1.7 1.7 0 00-1.5-1H3a2 2 0 110-4h.1a1.7 1.7 0 001.5-1.1 1.7 1.7 0 00-.3-1.8l-.1-.1a2 2 0 112.8-2.8l.1.1a1.7 1.7 0 001.8.3H9a1.7 1.7 0 001-1.5V3a2 2 0 114 0v.1a1.7 1.7 0 001 1.5 1.7 1.7 0 001.8-.3l.1-.1a2 2 0 112.8 2.8l-.1.1a1.7 1.7 0 00-.3 1.8V9a1.7 1.7 0 001.5 1H21a2 2 0 110 4h-.1a1.7 1.7 0 00-1.5 1z"/></symbol><symbol id="xx" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></symbol><symbol id="chk" viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7"/></symbol></defs></svg>
 <div id="app">
@@ -1401,8 +1310,8 @@ html{-webkit-text-size-adjust:100%;text-size-adjust:100%}
 <div style="margin-top: 2px; font-size: 13px; color: #55616d">Finish setup to go live</div>
 </div>
 <div style="display: flex; gap: 9px">
-<button type="button" class="t3 pk yel" style="width:34px;height:34px;border:0;padding:0;cursor:pointer" aria-label="Notifications"><img src="icons/bell.png" alt="" draggable="false"></button>
-<button type="button" class="t3 pk blk" style="width:34px;height:34px;border:0;padding:0;cursor:pointer" aria-label="Menu"><img src="icons/menu.png" alt="" draggable="false"></button>
+<button type="button" class="t3 yel" style="width:34px;height:34px;border:0;padding:0;cursor:pointer" aria-label="Notifications"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 16v-5a6 6 0 1112 0v5l1.500 2h-15zM10 21h4"></path></svg></button>
+<button type="button" class="t3 blk" style="width:34px;height:34px;border:0;padding:0;cursor:pointer" aria-label="Menu"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"></path></svg></button>
 </div>
 </div>
 
@@ -1410,7 +1319,7 @@ html{-webkit-text-size-adjust:100%;text-size-adjust:100%}
 
 <div class="glass card in" style="animation-delay: .08s">
 <div style="display: flex; gap: 12.5px">
-<div class="t3 pk gry" style="width: 50.5px; height: 50.5px"><img src="icons/info.png" alt="" draggable="false"></div>
+<div class="t3 gry" style="width: 50.5px; height: 50.5px"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><path d="M12 7.500v5M12 16.200v.1"></path></svg></div>
 <div>
 <div style="font-size: 16.5px; font-weight: 800">Not live yet</div>
 <div style="margin-top: 3.5px; font-size: 13px; line-height: 1.4; color: #55616d">Complete your profile and submit verification. Admin approval is required before you go live.</div>
@@ -1427,18 +1336,18 @@ html{-webkit-text-size-adjust:100%;text-size-adjust:100%}
 <div style="font-size: 18.5px; font-weight: 800; letter-spacing: -.3px">Setup checklist</div>
 <div style="font-size: 13px; font-weight: 700; color: #55616d">2/7</div>
 </div>
-<div class="row done"><div class="t3 pk grn" style="width: 25px; height: 25px"><img src="icons/check.png" alt="" draggable="false"></div><span>Display name</span></div>
-<div class="row"><div class="t3 pk w" style="width: 25px; height: 25px"><img src="icons/clock.png" alt="" draggable="false"></div><span>Creator handle</span><svg class="chev" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"></path></svg></div>
-<div class="row"><div class="t3 pk w" style="width: 25px; height: 25px"><img src="icons/clock.png" alt="" draggable="false"></div><span>Bio</span><svg class="chev" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"></path></svg></div>
-<div class="row done"><div class="t3 pk grn" style="width: 25px; height: 25px"><img src="icons/check.png" alt="" draggable="false"></div><span>Platform</span></div>
-<div class="row"><div class="t3 pk w" style="width: 25px; height: 25px"><img src="icons/clock.png" alt="" draggable="false"></div><span>Niche</span><svg class="chev" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"></path></svg></div>
-<div class="row"><div class="t3 pk w" style="width: 25px; height: 25px"><img src="icons/clock.png" alt="" draggable="false"></div><span>City</span><svg class="chev" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"></path></svg></div>
-<div class="row"><div class="t3 pk w" style="width: 25px; height: 25px"><img src="icons/clock.png" alt="" draggable="false"></div><span>At least one rate-card price</span><svg class="chev" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"></path></svg></div>
+<div class="row done"><div class="t3 grn" style="width: 25px; height: 25px"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 12.500l3.500 3.500 6.500-7"></path></svg></div><span>Display name</span></div>
+<div class="row"><div class="t3 w" style="width: 25px; height: 25px"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="7"></circle></svg></div><span>Creator handle</span><svg class="chev" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"></path></svg></div>
+<div class="row"><div class="t3 w" style="width: 25px; height: 25px"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="7"></circle></svg></div><span>Bio</span><svg class="chev" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"></path></svg></div>
+<div class="row done"><div class="t3 grn" style="width: 25px; height: 25px"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 12.500l3.500 3.500 6.500-7"></path></svg></div><span>Platform</span></div>
+<div class="row"><div class="t3 w" style="width: 25px; height: 25px"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="7"></circle></svg></div><span>Niche</span><svg class="chev" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"></path></svg></div>
+<div class="row"><div class="t3 w" style="width: 25px; height: 25px"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="7"></circle></svg></div><span>City</span><svg class="chev" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"></path></svg></div>
+<div class="row"><div class="t3 w" style="width: 25px; height: 25px"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="7"></circle></svg></div><span>At least one rate-card price</span><svg class="chev" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"></path></svg></div>
 </div>
 
 <div class="glass card in" style="animation-delay: .24s">
 <div style="display: flex; align-items: center; gap: 12.5px">
-<div class="t3 pk grn" style="width: 50.5px; height: 50.5px"><img src="icons/shield-check.png" alt="" draggable="false"></div>
+<div class="t3 grn" style="width: 50.5px; height: 50.5px"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l7 3v6c0 4.500-3 7.500-7 9-4-1.500-7-4.500-7-9V6z"></path><path d="M9 12l2 2 4-4"></path></svg></div>
 <div style="flex: 1">
 <div style="font-size: 16.5px; font-weight: 800">Verification</div>
 <div style="margin-top: 2px; font-size: 12.5px; color: #55616d">Required to go live on Collancer.</div>
@@ -1449,15 +1358,15 @@ html{-webkit-text-size-adjust:100%;text-size-adjust:100%}
 </div>
 
 <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 11px">
-<div class="glass stat in" style="animation-delay: .32s"><div class="t3 pk teal" style="width: 39.5px; height: 39.5px"><img src="icons/calendar-check.png" alt="" draggable="false"></div><div><div style="font-size: 20.5px; font-weight: 800; line-height: 1">0</div><div style="margin-top: 2.5px; font-size: 12px; color: #55616d; line-height: 1.2">Active bookings</div></div></div>
-<div class="glass stat in" style="animation-delay: .36s"><div class="t3 pk orng" style="width: 39.5px; height: 39.5px"><img src="icons/clock.png" alt="" draggable="false"></div><div><div style="font-size: 20.5px; font-weight: 800; line-height: 1">0</div><div style="margin-top: 2.5px; font-size: 12px; color: #55616d; line-height: 1.2">Pending requests</div></div></div>
-<div class="glass stat in" style="animation-delay: .40s"><div class="t3 pk yel" style="width: 39.5px; height: 39.5px"><img src="icons/star.png" alt="" draggable="false"></div><div><div style="font-size: 20.5px; font-weight: 800; line-height: 1">—</div><div style="margin-top: 2.5px; font-size: 12px; color: #55616d; line-height: 1.2">Avg rating</div></div></div>
-<div class="glass stat in" style="animation-delay: .44s"><div class="t3 pk purp" style="width: 39.5px; height: 39.5px"><img src="icons/message-circle.png" alt="" draggable="false"></div><div><div style="font-size: 20.5px; font-weight: 800; line-height: 1">0</div><div style="margin-top: 2.5px; font-size: 12px; color: #55616d; line-height: 1.2">Reviews</div></div></div>
+<div class="glass stat in" style="animation-delay: .32s"><div class="t3 teal" style="width: 39.5px; height: 39.5px"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="5" width="16" height="15" rx="3"></rect><path d="M8 3v4M16 3v4M4 10h16M9 15l2 2 4-4"></path></svg></div><div><div style="font-size: 20.5px; font-weight: 800; line-height: 1">0</div><div style="margin-top: 2.5px; font-size: 12px; color: #55616d; line-height: 1.2">Active bookings</div></div></div>
+<div class="glass stat in" style="animation-delay: .36s"><div class="t3 orng" style="width: 39.5px; height: 39.5px"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><path d="M12 7v5l3 2"></path></svg></div><div><div style="font-size: 20.5px; font-weight: 800; line-height: 1">0</div><div style="margin-top: 2.5px; font-size: 12px; color: #55616d; line-height: 1.2">Pending requests</div></div></div>
+<div class="glass stat in" style="animation-delay: .40s"><div class="t3 yel" style="width: 39.5px; height: 39.5px"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l2.700 5.600 6.100.9-4.400 4.300 1 6.100L12 17l-5.400 2.900 1-6.100L3.200 9.500l6.100-.9z"></path></svg></div><div><div style="font-size: 20.5px; font-weight: 800; line-height: 1">—</div><div style="margin-top: 2.5px; font-size: 12px; color: #55616d; line-height: 1.2">Avg rating</div></div></div>
+<div class="glass stat in" style="animation-delay: .44s"><div class="t3 purp" style="width: 39.5px; height: 39.5px"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11.500a8 8 0 01-11.800 7L4 20l1.400-4A8 8 0 1120 11.500z"></path></svg></div><div><div style="font-size: 20.5px; font-weight: 800; line-height: 1">0</div><div style="margin-top: 2.5px; font-size: 12px; color: #55616d; line-height: 1.2">Reviews</div></div></div>
 </div>
 
 <div class="glass card in" style="animation-delay: .5s">
 <div style="display: flex; gap: 12.5px; align-items: center">
-<div class="t3 pk blue" style="width: 61px; height: 61px"><img src="icons/sparkles.png" alt="" draggable="false"></div>
+<div class="t3 blue" style="width: 61px; height: 61px"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M11 3l1.800 5.200L18 10l-5.200 1.800L11 17l-1.800-5.200L4 10l5.200-1.800zM19 15v4M17 17h4"></path></svg></div>
 <div>
 <div style="font-size: 11px; font-weight: 800; letter-spacing: 1.8px; color: #55616d">YOUR CREATOR ASSISTANT</div>
 <div style="margin-top: 2px; font-size: 17.5px; font-weight: 800">Collancer AI</div>
@@ -1471,7 +1380,7 @@ html{-webkit-text-size-adjust:100%;text-size-adjust:100%}
 </div></section>
 <section class="scr" id="s-market"><div class="pg">
 <div class="head"><div><div class="eyebrow"><i></i>CREATOR MARKETPLACE</div><h1>Marketplace</h1><p>Brand briefs looking for creators</p></div>
-<div style="display:flex;gap:9px"><div class="t3 pk yel"><img src="icons/bell.png" alt="" draggable="false"></div><div class="t3 pk blk"><img src="icons/menu.png" alt="" draggable="false"></div></div></div>
+<div style="display:flex;gap:9px"><div class="t3 yel"><svg viewBox="0 0 24 24"><use href="#bell"/></svg></div><div class="t3 blk"><svg viewBox="0 0 24 24"><use href="#menu"/></svg></div></div></div>
 <div class="body">
 <div class="glass seg" id="seg"><div class="on" data-p="p1" id="tb1"><svg class="ico" style="width:15.5px;height:15.5px"><use href="#srch"/></svg>Browse <i class="bd">1</i></div><div data-p="p2" id="tb2"><svg class="ico" style="width:15.5px;height:15.5px"><use href="#send"/></svg>My proposals <i class="bd" id="bd2">0</i></div></div>
 
@@ -1480,7 +1389,7 @@ html{-webkit-text-size-adjust:100%;text-size-adjust:100%}
 <div class="chips" id="chips"><div class="black chip">All</div><div class="glass chip">Beauty</div><div class="glass chip">Fashion</div></div>
 <div class="sec"><div><h2>Open opportunities</h2><p>Briefs from brands looking for creators.</p></div><span class="glass cb">1</span></div>
 <div class="glass card" id="brief">
-<div style="display:flex;gap:12.5px;align-items:center"><div class="t3 pk teal" style="width:50.5px;height:50.5px"><img src="icons/tag.png" alt="" draggable="false"></div>
+<div style="display:flex;gap:12.5px;align-items:center"><div class="t3 teal" style="width:50.5px;height:50.5px"><svg viewBox="0 0 24 24"><use href="#tag"/></svg></div>
 <div style="flex:1"><div style="font-size:16.5px;font-weight:800">Finding creators</div><div style="margin-top:2.5px;font-size:12px;color:#55616d">mamaearth · 3mo ago · <span id="cnt">0 proposals</span></div></div>
 <div class="bud">Budget<b>₹20,000</b></div></div>
 <div style="display:flex;gap:7px;margin-top:14.5px"><div class="glass pill t">Beauty</div><div class="glass pill">Instagram Reel</div></div>
@@ -1490,7 +1399,7 @@ html{-webkit-text-size-adjust:100%;text-size-adjust:100%}
 
 <div class="panel" id="p2">
 <div class="sec"><div><h2>My proposals</h2><p>Track the pitches you've sent to brands.</p></div><span class="glass cb" id="cb2">0</span></div>
-<div class="glass card empty" id="empty" style="margin-top:18px"><div class="t3 pk teal bob" style="width:75.5px;height:75.5px"><img src="icons/send.png" alt="" draggable="false"></div>
+<div class="glass card empty" id="empty" style="margin-top:18px"><div class="t3 teal bob" style="width:75.5px;height:75.5px"><svg viewBox="0 0 24 24"><use href="#send"/></svg></div>
 <div style="margin-top:20px;font-size:20.5px;font-weight:800">No proposals yet</div>
 <div style="margin-top:5.5px;font-size:13px;line-height:1.4;color:#55616d">Browse briefs and send your first proposal.</div>
 <button class="black" id="go" style="margin-top:20px;height:43px;padding:0 23.5px;border-radius:21.5px">Browse briefs</button></div>
@@ -1499,13 +1408,13 @@ html{-webkit-text-size-adjust:100%;text-size-adjust:100%}
 </div>
 
 </div><div class="dim" id="dim"></div>
-<div class="glass sheet"><div class="grab" id="grab"></div><div class="glass xbtn pkb" id="closeBtn"><img src="icons/x.png" alt="" draggable="false"></div>
-<div style="display:flex;gap:12.5px;align-items:center;margin-top:11px"><div class="t3 pk teal" style="width:47px;height:47px"><img src="icons/tag.png" alt="" draggable="false"></div>
+<div class="glass sheet"><div class="grab" id="grab"></div><div class="glass xbtn" id="closeBtn"><svg class="ico" style="width:14.5px;height:14.5px"><use href="#x"/></svg></div>
+<div style="display:flex;gap:12.5px;align-items:center;margin-top:11px"><div class="t3 teal" style="width:47px;height:47px"><svg viewBox="0 0 24 24"><use href="#tag"/></svg></div>
 <div style="flex:1"><div style="font-size:18.5px;font-weight:800">Finding creators</div><div style="margin-top:2.5px;font-size:12px;color:#55616d">mamaearth · posted 3mo ago</div></div><div class="bud">Budget<b>₹20,000</b></div></div>
 <div style="display:flex;gap:7px;margin-top:12.5px"><div class="glass pill t">Beauty</div><div class="glass pill">Instagram Reel</div></div>
 <div style="margin-top:12.5px;font-size:13px;line-height:1.4;color:#55616d">Looking for creators to promote our newly launched products.</div>
 <div style="height:1px;background:rgba(15,40,60,.08);margin:14.5px 0 2px"></div>
-<div style="display:flex;justify-content:space-between;align-items:center;margin-top:11px"><div><div style="font-size:17.5px;font-weight:800">Send proposal</div><div style="font-size:13px;color:#55616d;margin-top:2px">Introduce your content and quote your rate.</div></div><div class="t3 pk blk" style="width:32.5px;height:32.5px"><img src="icons/file-text.png" alt="" draggable="false"></div></div>
+<div style="display:flex;justify-content:space-between;align-items:center;margin-top:11px"><div><div style="font-size:17.5px;font-weight:800">Send proposal</div><div style="font-size:13px;color:#55616d;margin-top:2px">Introduce your content and quote your rate.</div></div><div class="t3 blk" style="width:32.5px;height:32.5px"><svg viewBox="0 0 24 24"><use href="#doc"/></svg></div></div>
 <div id="form">
 <label>Your price</label><div class="f"><input id="price" inputmode="numeric" placeholder="e.g. 8000"></div>
 <label>Pitch message</label><div class="f ta"><textarea id="pitch" placeholder="Hi! I create fashion reels for 40K followers..."></textarea></div>
@@ -1522,7 +1431,7 @@ html{-webkit-text-size-adjust:100%;text-size-adjust:100%}
 <div class="bh"><h1>Bookings</h1><p id="tot">0 total</p></div>
 <div class="bb">
 <div class="glass fw"><div class="fs" id="fs"><div class="black chip">All</div><div class="glass chip">Pending</div><div class="glass chip">Active</div><div class="glass chip">In review</div><div class="glass chip">Completed</div><div class="glass chip">Cancelled</div></div></div>
-<div class="glass ec" id="ec"><div class="t3 pk teal bob" style="width:75.5px;height:75.5px"><img src="icons/calendar-check.png" alt="" draggable="false"></div><h2 id="eh">No bookings yet</h2><p id="ep">When a brand sends you a collaboration request, it will appear here.</p></div>
+<div class="glass ec" id="ec"><div class="t3 teal bob" style="width:75.5px;height:75.5px"><svg viewBox="0 0 24 24"><use href="#cal"/></svg></div><h2 id="eh">No bookings yet</h2><p id="ep">When a brand sends you a collaboration request, it will appear here.</p></div>
 <div class="bkl" id="bkl" aria-live="polite"></div>
 </div>
 
@@ -1535,7 +1444,7 @@ html{-webkit-text-size-adjust:100%;text-size-adjust:100%}
 <button class="black" id="wbtn"><svg class="ico" style="stroke:#fff;width:19px;height:19px"><use href="#wallet"/></svg>Withdraw</button><div class="m">Minimum withdrawal ₹100</div></div>
 <div class="glass tb" id="tb"><div class="on" data-p="po">Overview</div><div data-p="pw">Withdraw</div><div data-p="pz">History</div></div>
 
-<div class="pn show" id="po"><div class="sg"><div class="glass sc"><div class="t3 pk red"><img src="icons/lock-keyhole.png" alt="" draggable="false"></div><div><b>₹0</b><span>Locked</span></div></div><div class="glass sc"><div class="t3 pk grn"><img src="icons/check-circle.png" alt="" draggable="false"></div><div><b>₹0</b><span>Released</span></div></div><div class="glass sc"><div class="t3 pk orng"><img src="icons/clock-3.png" alt="" draggable="false"></div><div><b>₹0</b><span>Pending payout</span></div></div><div class="glass sc"><div class="t3 pk purp"><img src="icons/wallet.png" alt="" draggable="false"></div><div><b>₹0</b><span>Successful payout</span></div></div></div>
+<div class="pn show" id="po"><div class="sg"><div class="glass sc"><div class="t3 red"><svg viewBox="0 0 24 24"><use href="#lock"/></svg></div><div><b>₹0</b><span>Locked</span></div></div><div class="glass sc"><div class="t3 grn"><svg viewBox="0 0 24 24"><use href="#ok"/></svg></div><div><b>₹0</b><span>Released</span></div></div><div class="glass sc"><div class="t3 orng"><svg viewBox="0 0 24 24"><use href="#hg"/></svg></div><div><b>₹0</b><span>Pending payout</span></div></div><div class="glass sc"><div class="t3 purp"><svg viewBox="0 0 24 24"><use href="#wallet"/></svg></div><div><b>₹0</b><span>Successful payout</span></div></div></div>
 <div class="glass nt"><b>Locked</b> is awaiting admin approval; <b>Released</b> is approved and included in the withdrawable balance. <b>Pending payout</b> is requested and awaiting processing, and <b>Successful payout</b> is what has been paid out to you.</div></div>
 
 <div class="pn" id="pw"><div class="glass fc"><h3>Request payout</h3><div class="av">Available: <b>₹0</b></div>
@@ -1545,7 +1454,7 @@ html{-webkit-text-size-adjust:100%;text-size-adjust:100%}
 <div id="fb" style="display:none"><label>Account holder name</label><div class="fd"><input id="hn" placeholder="Full name"></div><label>Account number</label><div class="fd"><input id="an" inputmode="numeric" placeholder="Account number"></div><label>IFSC code</label><div class="fd"><input id="ifs" placeholder="HDFC0001234" autocapitalize="characters"></div></div>
 <button class="black" id="rq"><svg class="ico" style="stroke:#fff;width:19px;height:19px"><use href="#wallet"/></svg>Request payout</button></div></div>
 
-<div class="pn" id="pz"><div class="glass ec2"><div class="t3 pk teal bob" style="width:84px;height:84px"><img src="icons/wallet.png" alt="" draggable="false"></div><h2>No payouts yet</h2><p>Your withdrawal requests and their status will appear here.</p></div></div>
+<div class="pn" id="pz"><div class="glass ec2"><div class="t3 teal bob" style="width:84px;height:84px"><svg viewBox="0 0 24 24"><use href="#wallet"/></svg></div><h2>No payouts yet</h2><p>Your withdrawal requests and their status will appear here.</p></div></div>
 </div>
 
 </section>
@@ -1553,9 +1462,9 @@ html{-webkit-text-size-adjust:100%;text-size-adjust:100%}
 <div class="hdr in"><div><div style="font-size:22.5px;font-weight:800;letter-spacing:-.5px">Profile</div><div style="margin-top:2px;font-size:13px;color:#55616d">What brands see about you</div></div></div>
 <div class="body" style="padding-top:16px">
 <div class="glass card in" style="animation-delay:.06s"><div style="display:flex;gap:12.5px;align-items:center"><div style="flex:none;width:47px;height:47px;border-radius:12.5px;box-shadow:0 0 0 1px rgba(0,0,0,.08),0 10px 16px -6px rgba(214,36,159,.45)"><svg viewBox="0 0 48 48" aria-hidden="true" style="width:100%;height:100%;display:block;filter:none"><defs><radialGradient id="igg" cx=".3" cy="1.07" r="1.4"><stop offset="0" stop-color="#fdf497"/><stop offset=".08" stop-color="#fdf497"/><stop offset=".45" stop-color="#fd5949"/><stop offset=".6" stop-color="#d6249f"/><stop offset=".95" stop-color="#285aeb"/></radialGradient></defs><rect width="48" height="48" rx="13" fill="url(#igg)"/><rect x="12" y="12" width="24" height="24" rx="7" fill="none" stroke="#fff" stroke-width="2.6"/><circle cx="24" cy="24" r="5.8" fill="none" stroke="#fff" stroke-width="2.6"/><circle cx="31.2" cy="16.8" r="1.7" fill="#fff"/></svg></div><div><div style="font-size:16.5px;font-weight:800">Instagram integration</div><div class="sub" style="font-size:12.5px">Connect Instagram to import your creator profile, audience metrics and content.</div></div></div><div style="margin-top:14.5px"><button type="button" class="black " style="width:100%;height:47px;border-radius:23.5px"><svg class=ico style=stroke:#fff;width:19px;height:19px viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="5"/><circle cx="12" cy="12" r="3.6"/><path d="M16.8 7.2v.1"/></svg>Connect Instagram</button></div></div>
-<div class="glass card in" style="animation-delay:.12s"><div style="display:flex;gap:14.5px;align-items:center"><div style="position:relative"><div class="t3 teal" style="width:68.5px;height:68.5px;font-size:26px;font-weight:800;color:#fff;text-shadow:0 2px 3px rgba(0,0,0,.3)">JS</div><div class="t3 pk blk" style="position:absolute;right:-7px;bottom:-3.5px;width:27px;height:27px;cursor:pointer"><img src="icons/image.png" alt="" draggable="false"></div></div><div><div style="font-size:18.5px;font-weight:800">Jainik Shah</div><div class="sub" style="margin-top:2px">0 followers on Instagram</div></div></div>
+<div class="glass card in" style="animation-delay:.12s"><div style="display:flex;gap:14.5px;align-items:center"><div style="position:relative"><div class="t3 teal" style="width:68.5px;height:68.5px;font-size:26px;font-weight:800;color:#fff;text-shadow:0 2px 3px rgba(0,0,0,.3)">JS</div><div class="t3 blk" style="position:absolute;right:-7px;bottom:-3.5px;width:27px;height:27px;cursor:pointer"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.500"/></svg></div></div><div><div style="font-size:18.5px;font-weight:800">Jainik Shah</div><div class="sub" style="margin-top:2px">0 followers on Instagram</div></div></div>
 <div style="margin-top:14.5px;height:11px;border-radius:5.5px;background:linear-gradient(180deg,rgba(215,230,239,.8),rgba(255,255,255,.8));box-shadow:0 0 0 1px rgba(15,40,60,.08),inset 0 2px 3px rgba(15,50,80,.15)"><div style="height:11px;width:29%;border-radius:5.5px;background:linear-gradient(180deg,#a5f3fc,#22d3ee 50%,#0891b2);box-shadow:0 0 0 1px rgba(8,145,178,.5),inset 0 1.5px 1px rgba(255,255,255,.8),0 4px 10px -2px rgba(34,211,238,.6);animation:grow_s-profile 1.4s cubic-bezier(.2,.9,.3,1) .4s both"></div></div><div style="margin-top:7px;font-size:12px;color:#55616d">29% profile complete</div></div>
-<div class="glass seg" id="seg"><div class="on" data-t="0"><div class="t3 pk teal"><img src="icons/user-round.png" alt="" draggable="false"></div>Profile</div><div class="" data-t="1"><div class="t3 pk purp"><img src="icons/image.png" alt="" draggable="false"></div>Content</div><div class="" data-t="2"><div class="t3 pk grn"><img src="icons/wallet.png" alt="" draggable="false"></div>Rate card</div><div class="" data-t="3"><div class="t3 pk orng"><img src="icons/settings.png" alt="" draggable="false"></div>Account</div></div>
+<div class="glass seg" id="seg"><div class="on" data-t="0"><div class="t3 teal"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0116 0"/></svg></div>Profile</div><div class="" data-t="1"><div class="t3 purp"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="3"/><circle cx="9" cy="9.5" r="1.5"/><path d="M5 17l5-5 4 4 2-2 3 3"/></svg></div>Content</div><div class="" data-t="2"><div class="t3 grn"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h14a2 2 0 012 2v9a2 2 0 01-2 2H6a2 2 0 01-2-2zM4 7l2-3h10M16 13.5h.1"/></svg></div>Rate card</div><div class="" data-t="3"><div class="t3 orng"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M18.4 5.6l-2.1 2.1M7.7 16.3l-2.1 2.1"/></svg></div>Account</div></div>
 
 <div class="sec on"><div class="glass card"><h2>Creator details</h2>
 <label>Display name</label><div class="f ft"><input type="text" placeholder="Your name" value="Jainik Shah"></div><label>Handle</label><div class="f ft"><input type="text" placeholder="aarav.creates" value=""></div><div class="hint">Unique, case-insensitive</div>
@@ -1567,26 +1476,26 @@ html{-webkit-text-size-adjust:100%;text-size-adjust:100%}
 <label style="margin-top:18px">Categories</label><div class="tags"><div class="tag glass"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12V4h8l10 10-8 8z"/><circle cx="7.500" cy="8.500" r="1"/></svg>Fashion</div><div class="tag glass"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12V4h8l10 10-8 8z"/><circle cx="7.500" cy="8.500" r="1"/></svg>Beauty</div><div class="tag glass"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12V4h8l10 10-8 8z"/><circle cx="7.500" cy="8.500" r="1"/></svg>Fitness</div><div class="tag glass"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12V4h8l10 10-8 8z"/><circle cx="7.500" cy="8.500" r="1"/></svg>Food</div><div class="tag glass"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12V4h8l10 10-8 8z"/><circle cx="7.500" cy="8.500" r="1"/></svg>Travel</div><div class="tag glass"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12V4h8l10 10-8 8z"/><circle cx="7.500" cy="8.500" r="1"/></svg>Tech</div><div class="tag glass"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12V4h8l10 10-8 8z"/><circle cx="7.500" cy="8.500" r="1"/></svg>Lifestyle</div><div class="tag glass"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12V4h8l10 10-8 8z"/><circle cx="7.500" cy="8.500" r="1"/></svg>Finance</div><div class="tag glass"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12V4h8l10 10-8 8z"/><circle cx="7.500" cy="8.500" r="1"/></svg>Education</div><div class="tag glass"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12V4h8l10 10-8 8z"/><circle cx="7.500" cy="8.500" r="1"/></svg>Gaming</div><div class="tag glass"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12V4h8l10 10-8 8z"/><circle cx="7.500" cy="8.500" r="1"/></svg>Health</div><div class="tag glass"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12V4h8l10 10-8 8z"/><circle cx="7.500" cy="8.500" r="1"/></svg>Home</div><div class="tag glass"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12V4h8l10 10-8 8z"/><circle cx="7.500" cy="8.500" r="1"/></svg>Automobile</div><div class="tag glass"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12V4h8l10 10-8 8z"/><circle cx="7.500" cy="8.500" r="1"/></svg>Parenting</div></div><label style="margin-top:16px">Promotion types you offer</label><div class="tags"><div class="tag glass">Instagram Story</div><div class="tag glass">Instagram Reel</div><div class="tag glass">Video Post</div><div class="tag glass">Personal Video</div><div class="tag glass">Personal Ad Shoot</div><div class="tag glass">YouTube Short</div></div>
 <div style="margin-top:18px"><button type="button" class="black " style="width:100%;height:47px;border-radius:23.5px"><svg class=ico style=stroke:#fff;width:19px;height:19px viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M8 12.500l3 3 5-6"/></svg>Save profile</button></div></div></div>
 
-<div class="sec"><div class="glass card"><div style="display:flex;gap:12.5px;align-items:center"><div class="t3 pk purp" style="width:43px;height:43px"><img src="icons/image.png" alt="" draggable="false"></div><h2>Content for brands</h2></div><p class="sub">Choose content from Instagram or upload samples manually. Anything you select or upload here will be shown on your Collancer profile as demo content, so brands can understand your content style.</p>
+<div class="sec"><div class="glass card"><div style="display:flex;gap:12.5px;align-items:center"><div class="t3 purp" style="width:43px;height:43px"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="3"/><circle cx="9" cy="9.5" r="1.5"/><path d="M5 17l5-5 4 4 2-2 3 3"/></svg></div><h2>Content for brands</h2></div><p class="sub">Choose content from Instagram or upload samples manually. Anything you select or upload here will be shown on your Collancer profile as demo content, so brands can understand your content style.</p>
 <div class="two" style="margin-top:14.5px"><div class="tag on" style="height:45px;justify-content:center;border-radius:22.5px;font-size:12.5px"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="5"/><circle cx="12" cy="12" r="3.6"/><path d="M16.8 7.2v.1"/></svg>From Instagram</div><div class="tag glass" style="height:45px;justify-content:center;border-radius:22.5px;font-size:12.5px"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 16V5M7 10l5-5 5 5M5 19h14"/></svg>Upload manually</div></div></div>
-<div class="glass card empty" style="padding:29px 20px"><div class="t3 pk gry bob" style="width:57.5px;height:57.5px"><img src="icons/image.png" alt="" draggable="false"></div><h2 style="margin-top:14.5px">Instagram content</h2><p class="sub">Connect Instagram to select posts and reels for your profile demo content.</p><div style="margin-top:16px;width:100%"><button type="button" class="black " style="width:100%;height:47px;border-radius:23.5px"><svg class=ico style=stroke:#fff;width:19px;height:19px viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="5"/><circle cx="12" cy="12" r="3.6"/><path d="M16.8 7.2v.1"/></svg>Connect Instagram</button></div></div></div>
+<div class="glass card empty" style="padding:29px 20px"><div class="t3 gry bob" style="width:57.5px;height:57.5px"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="3"/><circle cx="9" cy="9.5" r="1.5"/><path d="M5 17l5-5 4 4 2-2 3 3"/></svg></div><h2 style="margin-top:14.5px">Instagram content</h2><p class="sub">Connect Instagram to select posts and reels for your profile demo content.</p><div style="margin-top:16px;width:100%"><button type="button" class="black " style="width:100%;height:47px;border-radius:23.5px"><svg class=ico style=stroke:#fff;width:19px;height:19px viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="5"/><circle cx="12" cy="12" r="3.6"/><path d="M16.8 7.2v.1"/></svg>Connect Instagram</button></div></div></div>
 
-<div class="sec"><div class="glass card"><h2>Your packages</h2><p class="sub">Brands hire you by package, like a shop. Enable the services you offer, write what each includes, and set your price. Set a discounted price to stand out in discovery.</p></div><div class="glass pkg on"><div style="display:flex;align-items:center;gap:11px"><div class="t3 pk purp" style="width:36px;height:36px"><img src="icons/image.png" alt="" draggable="false"></div><div style="flex:1"><div style="font-size:15px;font-weight:800">1 × Instagram Story</div><div style="font-size:12px;color:#55616d">24-hr story with swipe-up/link</div></div><div class="sw on"></div></div>
+<div class="sec"><div class="glass card"><h2>Your packages</h2><p class="sub">Brands hire you by package, like a shop. Enable the services you offer, write what each includes, and set your price. Set a discounted price to stand out in discovery.</p></div><div class="glass pkg on"><div style="display:flex;align-items:center;gap:11px"><div class="t3 purp" style="width:36px;height:36px"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="3"/><circle cx="9" cy="9.5" r="1.5"/><path d="M5 17l5-5 4 4 2-2 3 3"/></svg></div><div style="flex:1"><div style="font-size:15px;font-weight:800">1 × Instagram Story</div><div style="font-size:12px;color:#55616d">24-hr story with swipe-up/link</div></div><div class="sw on"></div></div>
 <div class="body2"><div class="f ta ft"><textarea placeholder="What's included? e.g. 1 reel up to 60s, 2 revisions, posted within 5 days..."></textarea></div>
 <div class="two"><div><label>Price (₹)</label><div class="f ft"><input type="number" inputmode="numeric" placeholder="e.g. 2500"></div></div><div><label>Sale price (₹)</label><div class="f ft"><input type="number" inputmode="numeric" placeholder="Optional"></div></div></div>
-<label>Delivery</label><div class="f ft"><input type="number" inputmode="numeric" placeholder="Days"></div></div></div><div class="glass pkg on"><div style="display:flex;align-items:center;gap:11px"><div class="t3 pk blue" style="width:36px;height:36px"><img src="icons/image.png" alt="" draggable="false"></div><div style="flex:1"><div style="font-size:15px;font-weight:800">1 × Video Post</div><div style="font-size:12px;color:#55616d">In-feed video collaboration</div></div><div class="sw on"></div></div>
+<label>Delivery</label><div class="f ft"><input type="number" inputmode="numeric" placeholder="Days"></div></div></div><div class="glass pkg on"><div style="display:flex;align-items:center;gap:11px"><div class="t3 blue" style="width:36px;height:36px"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="3"/><circle cx="9" cy="9.5" r="1.5"/><path d="M5 17l5-5 4 4 2-2 3 3"/></svg></div><div style="flex:1"><div style="font-size:15px;font-weight:800">1 × Video Post</div><div style="font-size:12px;color:#55616d">In-feed video collaboration</div></div><div class="sw on"></div></div>
 <div class="body2"><div class="f ta ft"><textarea placeholder="What's included? e.g. 1 reel up to 60s, 2 revisions, posted within 5 days..."></textarea></div>
 <div class="two"><div><label>Price (₹)</label><div class="f ft"><input type="number" inputmode="numeric" placeholder="e.g. 2500"></div></div><div><label>Sale price (₹)</label><div class="f ft"><input type="number" inputmode="numeric" placeholder="Optional"></div></div></div>
-<label>Delivery</label><div class="f ft"><input type="number" inputmode="numeric" placeholder="Days"></div></div></div><div class="glass pkg on"><div style="display:flex;align-items:center;gap:11px"><div class="t3 pk red" style="width:36px;height:36px"><img src="icons/image.png" alt="" draggable="false"></div><div style="flex:1"><div style="font-size:15px;font-weight:800">1 × Instagram Reel</div><div style="font-size:12px;color:#55616d">Short-form video post</div></div><div class="sw on"></div></div>
+<label>Delivery</label><div class="f ft"><input type="number" inputmode="numeric" placeholder="Days"></div></div></div><div class="glass pkg on"><div style="display:flex;align-items:center;gap:11px"><div class="t3 red" style="width:36px;height:36px"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="3"/><circle cx="9" cy="9.5" r="1.5"/><path d="M5 17l5-5 4 4 2-2 3 3"/></svg></div><div style="flex:1"><div style="font-size:15px;font-weight:800">1 × Instagram Reel</div><div style="font-size:12px;color:#55616d">Short-form video post</div></div><div class="sw on"></div></div>
 <div class="body2"><div class="f ta ft"><textarea placeholder="What's included? e.g. 1 reel up to 60s, 2 revisions, posted within 5 days..."></textarea></div>
 <div class="two"><div><label>Price (₹)</label><div class="f ft"><input type="number" inputmode="numeric" placeholder="e.g. 2500"></div></div><div><label>Sale price (₹)</label><div class="f ft"><input type="number" inputmode="numeric" placeholder="Optional"></div></div></div>
-<label>Delivery</label><div class="f ft"><input type="number" inputmode="numeric" placeholder="Days"></div></div></div><div class="glass pkg on"><div style="display:flex;align-items:center;gap:11px"><div class="t3 pk teal" style="width:36px;height:36px"><img src="icons/image.png" alt="" draggable="false"></div><div style="flex:1"><div style="font-size:15px;font-weight:800">1 × Personal Video</div><div style="font-size:12px;color:#55616d">Dedicated personal video</div></div><div class="sw on"></div></div>
+<label>Delivery</label><div class="f ft"><input type="number" inputmode="numeric" placeholder="Days"></div></div></div><div class="glass pkg on"><div style="display:flex;align-items:center;gap:11px"><div class="t3 teal" style="width:36px;height:36px"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="3"/><circle cx="9" cy="9.5" r="1.5"/><path d="M5 17l5-5 4 4 2-2 3 3"/></svg></div><div style="flex:1"><div style="font-size:15px;font-weight:800">1 × Personal Video</div><div style="font-size:12px;color:#55616d">Dedicated personal video</div></div><div class="sw on"></div></div>
 <div class="body2"><div class="f ta ft"><textarea placeholder="What's included? e.g. 1 reel up to 60s, 2 revisions, posted within 5 days..."></textarea></div>
 <div class="two"><div><label>Price (₹)</label><div class="f ft"><input type="number" inputmode="numeric" placeholder="e.g. 2500"></div></div><div><label>Sale price (₹)</label><div class="f ft"><input type="number" inputmode="numeric" placeholder="Optional"></div></div></div>
-<label>Delivery</label><div class="f ft"><input type="number" inputmode="numeric" placeholder="Days"></div></div></div><div class="glass pkg on"><div style="display:flex;align-items:center;gap:11px"><div class="t3 pk orng" style="width:36px;height:36px"><img src="icons/image.png" alt="" draggable="false"></div><div style="flex:1"><div style="font-size:15px;font-weight:800">1 × Personal Ad Shoot</div><div style="font-size:12px;color:#55616d">Premium dedicated ad shoot</div></div><div class="sw on"></div></div>
+<label>Delivery</label><div class="f ft"><input type="number" inputmode="numeric" placeholder="Days"></div></div></div><div class="glass pkg on"><div style="display:flex;align-items:center;gap:11px"><div class="t3 orng" style="width:36px;height:36px"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="3"/><circle cx="9" cy="9.5" r="1.5"/><path d="M5 17l5-5 4 4 2-2 3 3"/></svg></div><div style="flex:1"><div style="font-size:15px;font-weight:800">1 × Personal Ad Shoot</div><div style="font-size:12px;color:#55616d">Premium dedicated ad shoot</div></div><div class="sw on"></div></div>
 <div class="body2"><div class="f ta ft"><textarea placeholder="What's included? e.g. 1 reel up to 60s, 2 revisions, posted within 5 days..."></textarea></div>
 <div class="two"><div><label>Price (₹)</label><div class="f ft"><input type="number" inputmode="numeric" placeholder="e.g. 2500"></div></div><div><label>Sale price (₹)</label><div class="f ft"><input type="number" inputmode="numeric" placeholder="Optional"></div></div></div>
-<label>Delivery</label><div class="f ft"><input type="number" inputmode="numeric" placeholder="Days"></div></div></div><div class="glass pkg on"><div style="display:flex;align-items:center;gap:11px"><div class="t3 pk grn" style="width:36px;height:36px"><img src="icons/image.png" alt="" draggable="false"></div><div style="flex:1"><div style="font-size:15px;font-weight:800">1 × YouTube Short</div><div style="font-size:12px;color:#55616d">Vertical short on YouTube</div></div><div class="sw on"></div></div>
+<label>Delivery</label><div class="f ft"><input type="number" inputmode="numeric" placeholder="Days"></div></div></div><div class="glass pkg on"><div style="display:flex;align-items:center;gap:11px"><div class="t3 grn" style="width:36px;height:36px"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="3"/><circle cx="9" cy="9.5" r="1.5"/><path d="M5 17l5-5 4 4 2-2 3 3"/></svg></div><div style="flex:1"><div style="font-size:15px;font-weight:800">1 × YouTube Short</div><div style="font-size:12px;color:#55616d">Vertical short on YouTube</div></div><div class="sw on"></div></div>
 <div class="body2"><div class="f ta ft"><textarea placeholder="What's included? e.g. 1 reel up to 60s, 2 revisions, posted within 5 days..."></textarea></div>
 <div class="two"><div><label>Price (₹)</label><div class="f ft"><input type="number" inputmode="numeric" placeholder="e.g. 2500"></div></div><div><label>Sale price (₹)</label><div class="f ft"><input type="number" inputmode="numeric" placeholder="Optional"></div></div></div>
 <label>Delivery</label><div class="f ft"><input type="number" inputmode="numeric" placeholder="Days"></div></div></div></div>
@@ -1598,36 +1507,36 @@ html{-webkit-text-size-adjust:100%;text-size-adjust:100%}
 <div style="display:flex;align-items:center;gap:11px;margin:16px 0"><div style="flex:1;font-size:14px;font-weight:700">Open to barter collaborations</div><div class="sw on"></div></div><button type="button" class="black " style="width:100%;height:47px;border-radius:23.5px"><svg class=ico style=stroke:#fff;width:19px;height:19px viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M8 12.500l3 3 5-6"/></svg>Save account details</button></div>
 <div class="glass card"><div><button type="button" class="black red" style="width:100%;height:47px;border-radius:23.5px"><svg class=ico style=stroke:#fff;width:19px;height:19px viewBox="0 0 24 24" aria-hidden="true"><path d="M9 4H6a2 2 0 00-2 2v12a2 2 0 002 2h3M15 8l4 4-4 4M19 12H9"/></svg>Log out</button></div></div></div>
 </div></div></section>
-<section class="scr" id="s-tools"><div class="pg"><div class="hdr in" style="gap:11px;justify-content:flex-start"><button type="button" class="t3 pk blk" id="bk" style="width:39.5px;height:39.5px;border:0;padding:0;cursor:pointer;flex:none" aria-label="Back"><img src="icons/back.png" alt="" draggable="false"></button><div><div style="font-size:22.5px;font-weight:800;letter-spacing:-.5px">Creator Tools</div><div style="margin-top:2px;font-size:13px;color:#55616d">Build, price and protect your creator business</div></div></div>
+<section class="scr" id="s-tools"><div class="pg"><div class="hdr in" style="gap:11px;justify-content:flex-start"><button type="button" class="t3 blk" id="bk" style="width:39.5px;height:39.5px;border:0;padding:0;cursor:pointer;flex:none" aria-label="Back"><svg viewBox="0 0 24 24" aria-hidden="true" ><path d="M19 12H5M11 6l-6 6 6 6"/></svg></button><div><div style="font-size:22.5px;font-weight:800;letter-spacing:-.5px">Creator Tools</div><div style="margin-top:2px;font-size:13px;color:#55616d">Build, price and protect your creator business</div></div></div>
 <div class="body" style="padding-top:16px">
-<div class="sec on" id="v0"><div class="glass card in" style="animation-delay:0.06s;display:flex;gap:12.5px;align-items:center;cursor:pointer" ><div class="t3 pk teal" style="width:50.5px;height:50.5px"><img src="icons/file-text.png" alt="" draggable="false"></div><div style="flex:1"><div style="font-size:16px;font-weight:800">Media Kit Builder</div><div class="sub" style="font-size:12.5px">Create a polished creator portfolio with your profile details, audience stats and shareable media kit.</div></div><div class="glass circ pkb" style="width:36px;height:36px;flex:none"><img src="icons/arrow-right.png" alt="" draggable="false"></div></div><div class="glass card in" style="animation-delay:0.13s;display:flex;gap:12.5px;align-items:center;cursor:pointer" data-tool="1"><div class="t3 pk purp" style="width:50.5px;height:50.5px"><img src="icons/document.png" alt="" draggable="false"></div><div style="flex:1"><div style="font-size:16px;font-weight:800">Creator Charges Calculator</div><div class="sub" style="font-size:12.5px">Estimate a fair starting quote based on your followers, average views, deliverables and usage rights.</div></div><div class="glass circ pkb" style="width:36px;height:36px;flex:none"><img src="icons/arrow-right.png" alt="" draggable="false"></div></div><div class="glass card in" style="animation-delay:0.2s;display:flex;gap:12.5px;align-items:center;cursor:pointer" ><div class="t3 pk red" style="width:50.5px;height:50.5px"><img src="icons/alert-triangle.png" alt="" draggable="false"></div><div style="flex:1"><div style="font-size:16px;font-weight:800">Scam Alerts</div><div class="sub" style="font-size:12.5px">Review community-submitted warnings and report suspicious brands, agencies or collaboration offers.</div></div><div class="glass circ pkb" style="width:36px;height:36px;flex:none"><img src="icons/arrow-right.png" alt="" draggable="false"></div></div></div>
+<div class="sec on" id="v0"><div class="glass card in" style="animation-delay:0.06s;display:flex;gap:12.5px;align-items:center;cursor:pointer" ><div class="t3 teal" style="width:50.5px;height:50.5px"><svg viewBox="0 0 24 24" aria-hidden="true" ><path d="M7 3h7l5 5v13H7zM14 3v5h5M10 13h6M10 17h6"/></svg></div><div style="flex:1"><div style="font-size:16px;font-weight:800">Media Kit Builder</div><div class="sub" style="font-size:12.5px">Create a polished creator portfolio with your profile details, audience stats and shareable media kit.</div></div><div class="glass circ" style="width:36px;height:36px;flex:none"><svg viewBox="0 0 24 24" aria-hidden="true" class=ico><path d="M5 12h14M13 6l6 6-6 6"/></svg></div></div><div class="glass card in" style="animation-delay:0.13s;display:flex;gap:12.5px;align-items:center;cursor:pointer" data-tool="1"><div class="t3 purp" style="width:50.5px;height:50.5px"><svg viewBox="0 0 24 24" aria-hidden="true" ><rect x="5" y="3" width="14" height="18" rx="3"/><path d="M8 7h8M8 12h.1M12 12h.1M16 12h.1M8 16h.1M12 16h.1M16 16h.1"/></svg></div><div style="flex:1"><div style="font-size:16px;font-weight:800">Creator Charges Calculator</div><div class="sub" style="font-size:12.5px">Estimate a fair starting quote based on your followers, average views, deliverables and usage rights.</div></div><div class="glass circ" style="width:36px;height:36px;flex:none"><svg viewBox="0 0 24 24" aria-hidden="true" class=ico><path d="M5 12h14M13 6l6 6-6 6"/></svg></div></div><div class="glass card in" style="animation-delay:0.2s;display:flex;gap:12.5px;align-items:center;cursor:pointer" ><div class="t3 red" style="width:50.5px;height:50.5px"><svg viewBox="0 0 24 24" aria-hidden="true" ><path d="M12 3l7 3v6c0 4.500-3 7.500-7 9-4-1.500-7-4.500-7-9V6zM12 8.500v4M12 15.800v.1"/></svg></div><div style="flex:1"><div style="font-size:16px;font-weight:800">Scam Alerts</div><div class="sub" style="font-size:12.5px">Review community-submitted warnings and report suspicious brands, agencies or collaboration offers.</div></div><div class="glass circ" style="width:36px;height:36px;flex:none"><svg viewBox="0 0 24 24" aria-hidden="true" class=ico><path d="M5 12h14M13 6l6 6-6 6"/></svg></div></div></div>
 <div class="sec" id="v2"><div><div class="tag glass" id="all2" style="width:max-content"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 12H5M11 6l-6 6 6 6"/></svg>All tools</div></div>
-<div id="msgs" style="display:flex;flex-direction:column;gap:9px;padding-bottom:81px"><div id="emp" class="glass card empty" style="padding:29px 20px"><div class="t3 pk red bob" style="width:54px;height:54px"><img src="icons/alert-triangle.png" alt="" draggable="false"></div><h2 style="margin-top:12.5px">Scam alerts chat</h2><p class="sub">No messages yet. Warn other creators about suspicious brands, agencies or offers.</p></div></div></div>
+<div id="msgs" style="display:flex;flex-direction:column;gap:9px;padding-bottom:81px"><div id="emp" class="glass card empty" style="padding:29px 20px"><div class="t3 red bob" style="width:54px;height:54px"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l7 3v6c0 4.500-3 7.500-7 9-4-1.500-7-4.500-7-9V6zM12 8.500v4M12 15.800v.1"/></svg></div><h2 style="margin-top:12.5px">Scam alerts chat</h2><p class="sub">No messages yet. Warn other creators about suspicious brands, agencies or offers.</p></div></div></div>
 <div class="sec" id="v1"><div><div class="tag glass" id="all" style="width:max-content"><svg viewBox="0 0 24 24" aria-hidden="true" ><path d="M19 12H5M11 6l-6 6 6 6"/></svg>All tools</div></div>
-<div class="glass card"><div style="display:flex;gap:12.5px;align-items:center"><div class="t3 pk purp" style="width:43px;height:43px"><img src="icons/document.png" alt="" draggable="false"></div><div><h2>Creator Charges Calculator</h2><div class="sub" style="font-size:12.5px">Profile data is prefilled. Adjust the brief and usage rights to estimate a starting quote.</div></div></div>
+<div class="glass card"><div style="display:flex;gap:12.5px;align-items:center"><div class="t3 purp" style="width:43px;height:43px"><svg viewBox="0 0 24 24" aria-hidden="true" ><rect x="5" y="3" width="14" height="18" rx="3"/><path d="M8 7h8M8 12h.1M12 12h.1M16 12h.1M8 16h.1M12 16h.1M16 16h.1"/></svg></div><div><h2>Creator Charges Calculator</h2><div class="sub" style="font-size:12.5px">Profile data is prefilled. Adjust the brief and usage rights to estimate a starting quote.</div></div></div>
 <label>Followers</label><div class="f ft"><input id="fo" type="number" inputmode="decimal" min="0" value="0"></div><label>Average views per post</label><div class="f ft"><input id="av" type="number" inputmode="decimal" min="0" value="0"></div><label>Engagement rate (%)</label><div class="f ft"><input id="en" type="number" inputmode="decimal" min="0" value="2.5"></div>
 <label>Deliverable</label><div class="f ft"><select id="dl"><option>Instagram Story</option><option selected>Instagram Reel</option><option>Video Post</option><option>Personal Video</option><option>Personal Ad Shoot</option><option>YouTube Short</option></select><svg class="chev" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg></div><label>Usage rights</label><div class="f ft"><select id="us"><option>Organic posting only</option><option>Paid ads (30 days)</option><option>Whitelisting</option><option>Full buyout</option></select><svg class="chev" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg></div>
 <div style="margin-top:16px;padding:16px;border-radius:21.5px;background:linear-gradient(180deg,rgba(215,230,239,.55),rgba(255,255,255,.9));box-shadow:0 0 0 1px rgba(15,40,60,.08),inset 0 1.5px 1px #fff"><div style="font-size:13px;color:#55616d">Suggested quote range</div><div id="rg" style="margin-top:5.5px;font-size:28px;font-weight:800;letter-spacing:-.6px">₹1,200 – ₹1,800</div><div id="md" style="margin-top:3.5px;font-size:13px;color:#55616d">Midpoint estimate: ₹1,500</div><div class="sub" style="margin-top:9px;font-size:12.5px">An estimate, not a guaranteed market rate. Factor in production costs, revisions, exclusivity, duration and campaign scope.</div></div></div></div>
 </div></div><div class="glass" id="cb" style="display:none;position:absolute;left:12px;right:12px;bottom:calc(84px + env(safe-area-inset-bottom,0px));z-index:6;height:52px;border-radius:26px;padding:6px 6px 6px 16px;align-items:center;gap:8px"><input id="ci" maxlength="500" autocomplete="off" placeholder="Type a message" aria-label="Message" style="all:unset;flex:1;min-width:0;font:inherit;font-size:14px;color:#0b1217"><button type="button" id="cs" class="black" aria-label="Send" style="width:39.5px;height:39.5px;border-radius:50%;flex:none;padding:0"><svg class="ico" style="stroke:#fff;width:18px;height:18px" viewBox="0 0 24 24"><path d="M12 19V5M6 11l6-6 6 6"/></svg></button></div></section>
 <section class="scr abs" id="s-ai">
-<div class="ah"><button class="rb glass pkb" aria-label="Back"><img src="icons/back.png" alt="" draggable="false"></button>
-<div class="t3 pk blk" style="width:44px;height:44px"><img src="icons/sparkles.png" alt="" draggable="false"></div>
+<div class="ah"><button class="rb glass" aria-label="Back"><svg class="ico"><use href="#back"/></svg></button>
+<div class="t3 blk" style="width:44px;height:44px"><svg viewBox="0 0 24 24"><use href="#spark"/></svg></div>
 <div class="ttl"><h1>Collancer AI</h1><p>Your creator assistant for bookings, earnings and growth</p></div>
-<button class="rb glass pkb" id="newc" aria-label="New chat"><img src="icons/plus.png" alt="" draggable="false"></button></div>
+<button class="rb glass" id="newc" aria-label="New chat"><svg class="ico"><use href="#plus"/></svg></button></div>
 <div class="msgs" id="msgs"></div>
 <div class="glass inp"><input id="in" placeholder="Ask about bookings, earnings, pricing..." autocomplete="off">
-<button class="rb glass wv pkb" id="vbtn" aria-label="Voice"><img src="icons/audio-lines.png" alt="" draggable="false"></button>
-<button class="black sendc rb pkb" id="go" aria-label="Send"><img src="icons/arrow-up.png" alt="" draggable="false"></button></div>
+<button class="rb glass wv" id="vbtn" aria-label="Voice"><svg class="ico"><use href="#wave"/></svg></button>
+<button class="black sendc rb" id="go" aria-label="Send"><svg class="ico"><use href="#up"/></svg></button></div>
 
 <div class="voice"><div class="orbw"><canvas id="cv" class="orbc" width="260" height="260"></canvas></div>
 <div class="glass lbox" id="lb">Listening...</div>
 <div class="vrow"><button class="glass gb" id="mt"><svg class="ico" style="width:20px;height:20px"><use href="#spk"/></svg><span>Mute</span></button>
 <button class="black gb" id="dn" style="color:#fff;font-weight:800"><svg class="ico" style="width:20px;height:20px"><use href="#mic"/></svg>Done</button>
 <button class="glass gb" id="cl"><svg class="ico" style="width:18px;height:18px"><use href="#xx"/></svg>Close</button></div>
-<button class="glass gb gear pkb" id="gr" aria-label="Voice settings"><img src="icons/settings.png" alt="" draggable="false"></button><div class="gl">Voice settings</div></div>
+<button class="glass gb gear" id="gr" aria-label="Voice settings"><svg class="ico" style="width:24px;height:24px"><use href="#gear"/></svg></button><div class="gl">Voice settings</div></div>
 
 <div class="dim2" id="dm"></div>
-<div class="glass vs"><div class="grab"></div><div class="vh"><div><b>Choose voice</b><span id="vsub">Tap a voice to hear it</span></div><button class="glass rb pkb" id="vx" aria-label="Close"><img src="icons/x.png" alt="" draggable="false"></button></div><div class="vl" id="vl"></div></div>
+<div class="glass vs"><div class="grab"></div><div class="vh"><div><b>Choose voice</b><span id="vsub">Tap a voice to hear it</span></div><button class="glass rb" id="vx" aria-label="Close"><svg class="ico" style="width:16px;height:16px"><use href="#xx"/></svg></button></div><div class="vl" id="vl"></div></div>
 </section>
 <div id="navwrap"><div id="navfade"></div><nav class="glass bar" id="nav" aria-label="Main"><i class="drop"></i>
 <div class="tab on" data-go="home" role="button" tabindex="0"><div class="t3 teal"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 11l8-7 8 7v9a1 1 0 01-1 1h-4v-6h-6v6H5a1 1 0 01-1-1z"/></svg></div>Home</div>
@@ -1653,25 +1562,13 @@ function go(name,o){o=o||{};if(!scr[name])return;
  if(isMain){tabs.forEach(function(t){t.classList.toggle('on',t.dataset.go===name)});requestAnimationFrame(function(){place(was&&MAIN.indexOf(was)>-1)})}
  var p=scr[name].querySelector('.pg');if(p&&!o.keepScroll)p.scrollTop=0;
  if(hooks[name])hooks[name]();
- if(isMain&&name&&name!=='login')try{localStorage.setItem('collancer_creator_tab',name)}catch(e){}
  if(!o.nopush)try{if(name==='ai'){history.pushState({s:name},'');pushedAI=true}else history.replaceState({s:name},'')}catch(e){}
 }
 tabs.forEach(function(t){var f=function(){go(t.dataset.go)};t.addEventListener('click',f);t.addEventListener('keydown',function(e){if(e.key==='Enter'||e.key===' '){e.preventDefault();f()}})});
 window.addEventListener('resize',function(){place(false)});
 window.addEventListener('popstate',function(e){var s=e.state&&e.state.s;if(s&&scr[s]){pushedAI=false;go(s,{nopush:true})}else if(cur==='ai'){pushedAI=false;go('home',{nopush:true})}});
 window.Collancer={go:go,on:function(n,f){hooks[n]=f},back:function(fallback){if(pushedAI){try{pushedAI=false;history.back();return}catch(e){}}go(fallback||'home')}};
-var start=(location.hash||'').slice(1);
-if(!scr[start]){
- var isAuth=false;
- try{isAuth=localStorage.getItem('collancer_creator_auth')==='1'}catch(e){}
- if(isAuth){
-  var lastTab=null;
-  try{lastTab=localStorage.getItem('collancer_creator_tab')}catch(e){}
-  start=(lastTab&&scr[lastTab]&&lastTab!=='login')?lastTab:'home';
- }else{
-  start='login';
- }
-}
+var start=(location.hash||'').slice(1);if(!scr[start])start='login';
 try{history.replaceState({s:start},'')}catch(e){}
 go(start,{nopush:true});
 if(document.fonts&&document.fonts.ready)document.fonts.ready.then(function(){place(false)});
@@ -1726,7 +1623,7 @@ $('err').textContent='';props.unshift({p:Number(p).toLocaleString('en-IN'),m:$('
 $('price').value=$('pitch').value=$('tl').value='';render();showSent(true)};
 $('list').addEventListener('click',function(e){var b=e.target.closest('.wd');if(!b)return;props[+b.dataset.i].s='withdrawn';render()});
 function render(){var n=props.length,pc=props.filter(function(x){return x.s==='pending'}).length;$('empty').style.display=n?'none':'';$('cnt').textContent=pc+(pc===1?' proposal':' proposals');$('bd2').textContent=n;$('cb2').textContent=n;
-$('list').innerHTML=props.map(function(x,i){var pd=x.s==='pending';return '<div class="glass card"><div style="display:flex;gap:12.5px;align-items:center"><div class="t3 pk teal" style="width:43px;height:43px"><img src="icons/send.png" alt="" draggable="false"></div><div style="flex:1"><div style="font-size:16px;font-weight:800">Finding creators</div><div style="margin-top:2px;font-size:12px;color:#55616d">mamaearth · Sent '+ago(x.ts)+'</div></div><div class="glass pill '+(pd?'st-p':'st-w')+'">'+(pd?'Pending':'Withdrawn')+'</div></div><div style="height:1px;background:rgba(15,40,60,.08);margin:12.5px 0"></div><div class="prow"><span>Your proposed price</span><b>₹'+x.p+'</b></div><div style="margin-top:11px;font-size:13px;line-height:1.4;color:#3b4652">'+esc(x.m)+'</div>'+(x.t?'<div style="margin-top:5.5px;font-size:12px;color:#55616d">Timeline: '+esc(x.t)+'</div>':'')+(pd?'<button class="wd" data-i="'+i+'">Withdraw proposal</button>':'')+'</div>'}).join('')}
+$('list').innerHTML=props.map(function(x,i){var pd=x.s==='pending';return '<div class="glass card"><div style="display:flex;gap:12.5px;align-items:center"><div class="t3 teal" style="width:43px;height:43px"><svg viewBox="0 0 24 24"><use href="#send"/></svg></div><div style="flex:1"><div style="font-size:16px;font-weight:800">Finding creators</div><div style="margin-top:2px;font-size:12px;color:#55616d">mamaearth · Sent '+ago(x.ts)+'</div></div><div class="glass pill '+(pd?'st-p':'st-w')+'">'+(pd?'Pending':'Withdrawn')+'</div></div><div style="height:1px;background:rgba(15,40,60,.08);margin:12.5px 0"></div><div class="prow"><span>Your proposed price</span><b>₹'+x.p+'</b></div><div style="margin-top:11px;font-size:13px;line-height:1.4;color:#3b4652">'+esc(x.m)+'</div>'+(x.t?'<div style="margin-top:5.5px;font-size:12px;color:#55616d">Timeline: '+esc(x.t)+'</div>':'')+(pd?'<button class="wd" data-i="'+i+'">Withdraw proposal</button>':'')+'</div>'}).join('')}
 
 })();
 <\/script>
@@ -1808,7 +1705,8 @@ function bot(t){var a=document.createElement('div');a.className='glass a';a.text
 function user(t){var u=document.createElement('div');u.className='u';u.innerHTML=esc(t);M.appendChild(u);M.scrollTop=M.scrollHeight}
 function speak(t,b){try{var S=window.speechSynthesis;if(!S)return;var was=b.classList.contains('on');S.cancel();root.querySelectorAll('.spk').forEach(function(x){x.classList.remove('on')});if(was)return;var u=new SpeechSynthesisUtterance(t);if(VO)u.voice=VO;u.onend=function(){b.classList.remove('on')};b.classList.add('on');S.speak(u)}catch(e){}}
 function ask(t,fv){t=t.trim();if(!t)return;user(t);var d=document.createElement('div');d.className='glass a';d.innerHTML='<div class="dots"><i></i><i></i><i></i></div>';M.appendChild(d);M.scrollTop=M.scrollHeight;
-var l=t.toLowerCase(),r=/charge|price|pricing|rate|cost/.test(l)?R.charge:/collab/.test(l)?R.collab:R.other;setTimeout(function(){d.remove();bot(r);if(fv&&!muted)say(r)},900)}
+function fallback(){var l=t.toLowerCase(),r=/charge|price|pricing|rate|cost/.test(l)?R.charge:/collab/.test(l)?R.collab:R.other;d.remove();bot(r);if(fv&&!muted)say(r)}
+try{if(window.CleoAI&&window.CleoAI.ask){window.CleoAI.ask(t,{isCreator:true,context:{}}).then(function(res){var ans=res&&res.answer?res.answer:'';d.remove();if(ans){bot(ans);if(fv&&!muted)say(ans)}else fallback()}).catch(fallback)}else fallback()}catch(e){fallback()}}
 function rdy(){$('go').classList.toggle('rdy',IN.value.trim().length>0)}
 IN.oninput=rdy;IN.onkeydown=function(e){if(e.key==='Enter'){send()}};
 function send(){var t=IN.value;if(!t.trim())return;IN.value='';rdy();ask(t)}
@@ -1817,14 +1715,13 @@ function init(){M.innerHTML='';user('What should I charge for a reel?');bot(R.ch
 $('newc').onclick=init;init();
 var tm,muted=false;
 var AC,AN,STREAM,REC,buf,demo=0,lvl=0,tgt=0,openT=0,raf=0,bub=[],DEMO='Mic unavailable here — showing a demo.';
-var voiceSilTm=null,voiceSubmitting=false,voiceTranscript='';
-function startRec(){var SR=window.SpeechRecognition||window.webkitSpeechRecognition;if(!SR){$('lb').textContent='Speech recognition is not supported in this browser.';return}try{REC=new SR();REC.continuous=true;REC.interimResults=true;REC.lang='en-IN';REC.onresult=function(e){if(voiceSubmitting)return;var t='';for(var i=0;i<e.results.length;i++){var part=e.results[i][0]&&e.results[i][0].transcript;if(part)t+=part}t=t.trim();if(!t)return;voiceTranscript=t;$('lb').textContent=t;clearTimeout(voiceSilTm);voiceSilTm=setTimeout(function(){if(voiceSubmitting)return;var finalText=(voiceTranscript||$('lb').textContent||'').trim();if(finalText&&finalText!=='Listening...'&&finalText!==DEMO){voiceSubmitting=true;finishVoiceQuestion(finalText)}},1400)};REC.onerror=function(e){if(e&&e.error!=='no-speech'&&e.error!=='aborted')$('lb').textContent='I could not hear that clearly. Please try again.'};REC.onend=function(){};REC.start()}catch(e){REC=null;$('lb').textContent='Microphone could not start. Please try again.'}}
-function finishVoiceQuestion(question){clearTimeout(voiceSilTm);voiceSubmitting=true;vclose();if(question&&question.trim())ask(question.trim(),1)}
+var silTm=null,wantRec=false;
+function startRec(){var SR=window.SpeechRecognition||window.webkitSpeechRecognition;if(!SR)return;try{REC=new SR();REC.continuous=true;REC.interimResults=true;REC.lang='en-IN';REC.onresult=function(e){var t='',fin=false;for(var i=0;i<e.results.length;i++){t+=e.results[i][0].transcript;if(e.results[i].isFinal)fin=true}if(t)$('lb').textContent=t;if(fin&&t.trim()){clearTimeout(silTm);silTm=setTimeout(function(){var tx=$('lb').textContent;if(tx&&tx!=='Listening...'&&tx!==DEMO){$('dn').onclick()} }},1600)}};REC.onend=function(){};REC.start()}catch(e){REC=null}}
 function startDemo(){demo=1;$('lb').textContent=DEMO;tm=setTimeout(function(){if(demo)$('lb').textContent='How do I get more brand deals?'},2800)}
 function startMic(){demo=0;try{navigator.mediaDevices.getUserMedia({audio:true}).then(function(s){if(!st.classList.contains('v')){s.getTracks().forEach(function(t){t.stop()});return}STREAM=s;AC=new (window.AudioContext||window.webkitAudioContext)();var src=AC.createMediaStreamSource(s);AN=AC.createAnalyser();AN.fftSize=512;buf=new Uint8Array(AN.fftSize);src.connect(AN);startRec()}).catch(startDemo)}catch(e){startDemo()}}
-function stopMic(){try{if(REC){REC.onend=null;REC.stop()}}catch(e){}REC=null;try{if(STREAM)STREAM.getTracks().forEach(function(t){t.stop()})}catch(e){}STREAM=null;try{if(AC)AC.close()}catch(e){}AC=null;AN=null;demo=0}
-function vopen(){clearTimeout(voiceSilTm);voiceSubmitting=false;voiceTranscript='';st.classList.add('v');$('lb').textContent='Listening...';clearTimeout(tm);openT=performance.now();startMic();cancelAnimationFrame(raf);raf=requestAnimationFrame(loop)}
-function vclose(){clearTimeout(voiceSilTm);stopMic();st.classList.remove('v');cancelAnimationFrame(raf);tgt=0}
+function stopMic(){wantRec=false;clearTimeout(silTm);try{if(REC){REC.onend=null;REC.stop()}}catch(e){}REC=null;try{if(STREAM)STREAM.getTracks().forEach(function(t){t.stop()})}catch(e){}STREAM=null;try{if(AC)AC.close()}catch(e){}AC=null;AN=null;demo=0}
+function vopen(){st.classList.add('v');$('lb').textContent='Listening...';clearTimeout(tm);openT=performance.now();startMic();cancelAnimationFrame(raf);raf=requestAnimationFrame(loop)}
+function vclose(){clearTimeout(tm);stopMic();st.classList.remove('v');cancelAnimationFrame(raf);tgt=0}
 var FS=`precision highp float;
 uniform vec2 R;uniform float T;uniform float L;uniform float B;
 float hs(vec2 p){p=fract(p*vec2(123.34,456.21));p+=dot(p,p+45.32);return fract(p.x*p.y);}
@@ -1872,7 +1769,7 @@ function loop(now){raf=requestAnimationFrame(loop);var t=now/1000;
  lvl+=(tgt-lvl)*(tgt>lvl?.35:.07);render(t)}
 render(0);
 $('vbtn').onclick=vopen;$('cl').onclick=vclose;
-$('dn').onclick=function(){if(voiceSubmitting)return;var t=(voiceTranscript||$('lb').textContent||'').trim();if(!t||t==='Listening...'||t===DEMO){vclose();return}finishVoiceQuestion(t)};
+$('dn').onclick=function(){var t=$('lb').textContent;vclose();if(t&&t!=='Listening...'&&t!==DEMO)ask(t,1)};
 $('mt').onclick=function(){muted=!muted;this.querySelector('span').textContent=muted?'Unmute':'Mute';this.querySelector('use').setAttribute('href',muted?'#mute':'#spk')};
 var VO=null,curV='',VL=[];
 var FEM=/female|woman|samantha|victoria|karen|moira|tessa|fiona|zira|aria|jenny|emma|susan|hazel|heera|veena|allison|ava|joanna|salli|kendra|kimberly|ivy|nicole|amy|libby|sonia|natasha/i,MAL=/\bmale\b|daniel|david|alex|fred|mark|guy|eric|roger|christopher|steffan|george|james|ravi|rishi|thomas|oliver|arthur|brian|matthew|justin|joey|ryan|liam/i;
@@ -1917,7 +1814,6 @@ var LAB={All:'total',Pending:'pending',Active:'active','In review':'in review',C
 
 function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]})}
 function ic(n,c){return '<svg class="ico '+(c||'')+'" viewBox="0 0 24 24" aria-hidden="true"><use href="#'+n+'"/></svg>'}
-var PKM={'star8':'sparkles','bell':'bell','menu':'menu','back':'back','cam':'image','dash':'chart-no-axes-combined','flame':'chart-no-axes-combined','spark':'sparkles','wallet':'wallet','ok':'check-circle','shop':'shopping-bag','clock':'clock','rupee':'indian-rupee','eye':'eye','radio':'globe','star':'star','users':'users','alert':'alert-triangle','bank':'bank','card':'credit-card','swap':'repeat-2','doc':'file-text','ph':'phone','rs':'indian-rupee','tag':'tag','up':'upload','plus':'plus','user':'user-round','pin':'map-pin','lock':'lock-keyhole','shield':'shield-check','compass':'compass','cal':'calendar-check','x':'x','search':'search'};function pk(n){return '<img src="icons/'+(PKM[n]||n)+'.png" alt="" draggable="false">'}
 function inr(n){return '\u20B9'+Number(n||0).toLocaleString('en-IN')}
 function earn(b){return b.type==='barter'?0:Math.round((Number(b.price)||0)*.95)}
 function fdate(d){if(!d)return '';var x=new Date(/^\d{4}-\d{2}-\d{2}$/.test(d)?d+'T00:00:00':d);return isNaN(x)?esc(d):x.toLocaleDateString('en-IN',{day:'numeric',month:'short',year:'numeric'})}
@@ -1953,7 +1849,7 @@ function render(){
 }
 
 /* ---------- detail ---------- */
-function sec(icon,color,title,inner){return '<div class="glass bk-sec"><div class="bk-sh"><div class="t3 pk '+color+'">'+pk(icon)+'</div><b>'+title+'</b></div>'+inner+'</div>'}
+function sec(icon,color,title,inner){return '<div class="glass bk-sec"><div class="bk-sh"><div class="t3 '+color+'">'+ic(icon)+'</div><b>'+title+'</b></div>'+inner+'</div>'}
 function row(l,v){return v?'<div class="bk-r"><span>'+l+'</span><b>'+v+'</b></div>':''}
 function tags(v){var a=Array.isArray(v)?v:String(v||'').split(/[\s,]+/);a=a.filter(Boolean);return a.length?'<div class="bk-tags" style="margin:0;justify-content:flex-end">'+a.map(function(t){return '<span class="bk-tag h">'+esc(t)+'</span>'}).join('')+'</div>':''}
 function media(m){if(!m||!m.length)return '';var h=m.filter(function(u){return /^(https?:|data:image|data:video|blob:)/i.test(u)}).map(function(u){return /^data:video|\.(mp4|webm|mov)(\?|$)/i.test(u)?'<video src="'+esc(u)+'" controls playsinline preload="metadata"></video>':'<img src="'+esc(u)+'" alt="Brief media" loading="lazy">'}).join('');return h?sec('up','purp','Brief media','<div class="bk-mg">'+h+'</div>'):''}
@@ -1965,7 +1861,7 @@ function detail(){
  var req=row('Deliverables',esc(b.deliverables))+row('Deadline',fdate(b.deadline))+row('Platform',esc(b.platform))+row('Category',esc(b.category))+row('Target audience',esc(b.audience))
   +(b.hashtags&&tags(b.hashtags)?'<div class="bk-r"><span>Hashtags</span>'+tags(b.hashtags)+'</div>':'')
   +row('Website',b.website?site:'')+row('Call to action',esc(b.cta))+row('Usage rights',esc(b.usage))+row('Revisions',esc(b.revisions))+row('Exclusivity',esc(b.exclusivity));
- var h='<div class="bkd-h"><div class="glass circ pkb" data-a="close" role="button" tabindex="0" aria-label="Back">'+pk('back')+'</div>'
+ var h='<div class="bkd-h"><div class="glass circ" data-a="close" role="button" tabindex="0" aria-label="Back">'+ic('back')+'</div>'
  +'<div class="ht"><b>Booking request</b><span>'+(b.received?'Received '+fdt(b.received):(b.orderId?'Order '+esc(b.orderId):''))+'</span></div>'
  +'<span class="bk-st '+stc(b.status)+'">'+(pend?'New':esc(b.status))+'</span></div>'
  +'<div class="bkd-sc'+(pend?' pad':'')+'" id="bkds">'
@@ -2044,7 +1940,7 @@ window.addEventListener('message',function(e){if(e.data==='collancer:previewBook
 render();
 })();
 <\/script>
-<style>#cl-sw{position:fixed;z-index:2147483000;left:12px;top:calc(10px + env(safe-area-inset-top,0px));display:none;align-items:center;gap:6px;height:36px;padding:0 14px 0 10px;border:1px solid rgba(255,255,255,.95);border-radius:18px;font:800 13px -apple-system,BlinkMacSystemFont,'Inter',system-ui,sans-serif;color:#0b1217;cursor:pointer;background:rgba(255,255,255,.72);backdrop-filter:blur(18px) saturate(180%);-webkit-backdrop-filter:blur(18px) saturate(180%);box-shadow:0 0 0 1px rgba(95,106,120,.45),0 8px 16px -8px rgba(15,50,80,.4)}#cl-sw svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round}:is(#_x,body) .t3.pk{background:none!important;box-shadow:none!important;border:0!important;overflow:visible}:is(#_x,body) .t3.pk::after{display:none!important}.t3.pk>img{width:100%;height:100%;object-fit:contain;display:block;position:relative;z-index:1;pointer-events:none}:is(#_x,body) .pkb{background:none!important;box-shadow:none!important;border:0!important;padding:0!important;overflow:visible;backdrop-filter:none!important;-webkit-backdrop-filter:none!important}:is(#_x,body) .pkb::before,:is(#_x,body) .pkb::after{display:none!important}.pkb>img{width:100%;height:100%;object-fit:contain;display:block;pointer-events:none}</style>
+<style>#cl-sw{position:fixed;z-index:2147483000;left:12px;top:calc(10px + env(safe-area-inset-top,0px));display:none;align-items:center;gap:6px;height:36px;padding:0 14px 0 10px;border:1px solid rgba(255,255,255,.95);border-radius:18px;font:800 13px -apple-system,BlinkMacSystemFont,'Inter',system-ui,sans-serif;color:#0b1217;cursor:pointer;background:rgba(255,255,255,.72);backdrop-filter:blur(18px) saturate(180%);-webkit-backdrop-filter:blur(18px) saturate(180%);box-shadow:0 0 0 1px rgba(95,106,120,.45),0 8px 16px -8px rgba(15,50,80,.4)}#cl-sw svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round}</style>
 <button type="button" id="cl-sw" aria-label="Switch role"><svg viewBox="0 0 24 24"><path d="M19 12H5M11 6l-6 6 6 6"/></svg>Switch role</button>
 <script>(function(){var b=document.getElementById('cl-sw'),K=function(){var s=document.getElementById('s-login');return s&&s.classList.contains('on')};
 function vis(){try{return K()}catch(e){return false}}
@@ -2056,6 +1952,72 @@ b.onclick=function(){parent.postMessage('collancer:switch','*')};})();<\/script>
 <script src="connect/firebase-config.js"><\/script>
 <script type="module" src="connect/ai/index.js"><\/script>
 <script src="connect/creator-connect.js"><\/script>
+
+<script>
+// Global error handling — show user-friendly messages instead of silent failures
+window.addEventListener('error', function(e) {
+  console.error('Global error:', e.error);
+  if (typeof toast === 'function') {
+    toast('Something went wrong. Please try again.');
+  }
+});
+window.addEventListener('unhandledrejection', function(e) {
+  console.error('Unhandled rejection:', e.reason);
+  if (typeof toast === 'function') {
+    toast('Something went wrong. Please try again.');
+  }
+});
+// Offline detection
+function updateOnlineStatus() {
+  if (!navigator.onLine && typeof toast === 'function') {
+    toast('You are offline. Please check your connection.');
+  }
+}
+window.addEventListener('online', updateOnlineStatus);
+window.addEventListener('offline', updateOnlineStatus);
+</script>
+
+<script>
+// Share helper — uses Web Share API with WhatsApp/clipboard fallback
+function shareProfile(name, handle) {
+  var url = 'https://gocolllancer.vercel.app/c/' + encodeURIComponent(handle || '');
+  var text = 'Check out ' + (name || 'this creator') + ' on Collancer!';
+  if (navigator.share) {
+    navigator.share({ title: 'Collancer', text: text, url: url }).catch(function(){});
+  } else {
+    // WhatsApp fallback
+    var wa = 'https://wa.me/?text=' + encodeURIComponent(text + ' ' + url);
+    window.open(wa, '_blank');
+  }
+}
+function copyLink(url) {
+  var u = url || location.href;
+  if (navigator.clipboard) {
+    navigator.clipboard.writeText(u).then(function(){
+      if (typeof toast === 'function') toast('Link copied!');
+    });
+  }
+}
+</script>
+
+<script>
+// Analytics helper — tracks key events (wires to Firebase Analytics when configured)
+function track(event, params) {
+  params = params || {};
+  try {
+    // Firebase Analytics (if initialized)
+    if (typeof firebase !== 'undefined' && firebase.analytics) {
+      firebase.analytics().logEvent(event, params);
+    }
+    // Also log to console in dev
+    if (location.hostname === 'localhost') {
+      console.log('[Analytics]', event, params);
+    }
+  } catch(e) {}
+}
+// Auto-track page views
+track('page_view', { page: location.pathname + location.hash });
+</script>
 </body></html></script>
 <script type="text/plain" id="src-brand"><!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"><title>Collancer – Liquid Glass</title><style>
 :root{box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
@@ -2208,7 +2170,7 @@ h2{margin:0;font-size:20px;font-weight:800;letter-spacing:-.3px}.sub{margin:4px 
 .ai-orb i:nth-child(1){width:150px;height:150px;background:#2ec4d6;left:-20px;top:20px}.ai-orb i:nth-child(2){width:140px;height:140px;background:#9b7fe0;left:70px;top:90px;animation-delay:-2s}.ai-orb i:nth-child(3){width:120px;height:120px;background:#d07aa6;left:10px;top:150px;animation-delay:-4s}.ai-orb i:nth-child(4){width:130px;height:130px;background:#3ba58a;right:-20px;bottom:-10px;animation-delay:-1s}.ai-orb i:nth-child(5){width:110px;height:110px;background:#3a2c55;right:0;top:0;animation-delay:-3s}
 @keyframes ai-fl{to{transform:translate(34px,-28px) scale(1.2)}}
 .ai-orb::after{content:"";position:absolute;inset:0;border-radius:50%;background:radial-gradient(60% 40% at 32% 18%,rgba(255,255,255,.5),rgba(255,255,255,0) 70%)}
-.ai-lbox{width:340px;height:140px;margin-top:auto;border-radius:30px;padding:20px 22px;font-size:16px;line-height:1.4;color:#667380;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere}.ai-lbox.ai-thinking{color:#667380}.ai-lbox.ai-thinking:after{content:'…';display:inline-block;min-width:1.2em;animation:aiVoiceDots 1s steps(3,end) infinite}@keyframes aiVoiceDots{0%{opacity:.2}50%{opacity:1}100%{opacity:.2}}
+.ai-lbox{width:340px;height:140px;margin-top:auto;border-radius:30px;padding:20px 22px;font-size:16px;line-height:1.4;color:#667380}
 .ai-vrow{display:flex;gap:12px;width:360px;margin:16px 0 0}.ai-vrow .ai-gb{flex:1;height:52px;border-radius:26px;font-size:16px;font-weight:800;gap:8px}
 .ai-gb{display:flex;align-items:center;justify-content:center;cursor:pointer;border:0;color:#0b1217;font-family:inherit;transition:transform .3s cubic-bezier(.3,1.5,.5,1)}.ai-gb:hover{transform:translateY(-1px)}.ai-gb:active{transform:scale(.97)}
 .ai-gear{width:56px;height:56px;border-radius:50%;margin:14px 0 6px;padding:0}.ai-gl{font-size:12.5px;font-weight:700;color:#55616d;margin-bottom:20px}
@@ -2254,48 +2216,9 @@ body.ai-on .stage{display:none}
 .ai-w.v{display:block}
 .ai-p .ai-msgs{bottom:calc(162px + env(safe-area-inset-bottom,0px))}
 .ai-p .ai-inp{left:14px;right:14px;bottom:calc(100px + env(safe-area-inset-bottom,0px))}
-/* ===== mobile fit layer (brand) ===== */
-html{-webkit-text-size-adjust:100%;text-size-adjust:100%}
-/* fill the whole screen on every phone (was a 390px column with side gutters) */
-@media (max-width:600px){
-  .stage{max-width:none!important;min-height:100vh;min-height:100dvh}
-  body::after{max-width:none}
-  .pp .pw{max-width:none;box-shadow:none}
-  .ai-p,.ai-w{max-width:none}
-  .tbar{width:calc(100% - 24px)!important;max-width:520px}
-}
-@media (max-width:480px){
-  .hdr{padding:16px 16px 0}
-  .head{padding:16px 16px 0}
-  .head h1{font-size:22px}
-  .body{padding:14px 14px 0;gap:12px}
-  .card{border-radius:24px;padding:14px}
-  .search{height:46px;padding:0 16px;border-radius:23px;font-size:14.5px}
-  .chip{height:36px;padding:0 16px;font-size:13.5px;border-radius:18px}
-  .tag{height:34px;padding:0 12px;font-size:13px;border-radius:17px}
-  h2{font-size:18px}
-  h2[style*="font-size:24px"]{font-size:20px!important}
-  .seg{padding:5px;border-radius:26px}
-  .seg div{padding:10px 0;font-size:14px;border-radius:21px}
-  .sheet{border-radius:32px;padding:12px 16px 16px}
-  .empty{padding:32px 20px}
-  .pc{padding:26px 18px 18px;border-radius:28px}
-  .tab{font-size:10px}
-  .hdr>div:first-child>div:last-child>div:last-child{font-size:9px!important;letter-spacing:.5px!important}
-}
-/* header tagline stays on one line when there is room */
-@media (min-width:350px) and (max-width:480px){
-  .hdr>div:first-child>div:last-child>div:last-child{white-space:nowrap}
-}
-@media (max-width:360px){
-  .tab{font-size:9.5px;letter-spacing:-.02em}
-  body #cl-sw{height:32px;top:calc(8px + env(safe-area-inset-top,0px));left:10px;padding:0 11px 0 8px;gap:4px;font-size:12.5px;border-radius:16px}
-  body #cl-sw svg{width:14px;height:14px}
-}
-:is(#_x,body) .t3.pk{background:none!important;box-shadow:none!important;border:0!important;overflow:visible}:is(#_x,body) .t3.pk::after{display:none!important}.t3.pk>img{width:100%;height:100%;object-fit:contain;display:block;position:relative;z-index:1;pointer-events:none}</style></head><body><svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs><linearGradient id="vbg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#5bb8ff"/><stop offset=".5" stop-color="#1d9bf0"/><stop offset="1" stop-color="#0a66d0"/></linearGradient><radialGradient id="vbr" cx=".32" cy=".25" r=".75"><stop offset="0" stop-color="#fff" stop-opacity=".45"/><stop offset=".55" stop-color="#fff" stop-opacity="0"/><stop offset="1" stop-color="#003c8f" stop-opacity=".35"/></radialGradient></defs></svg><div class="stage"><div id="app"></div></div><button type="button" class="black" id="bkb" style="">Book this creator</button><div class="glass tbar"><i class="drop"></i><div class="tab on" data-a="go" data-v="discover"><div class="t3 teal" style="width:32px;height:32px"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M15.500 8.500l-2 5-5 2 2-5z"/></svg></div>Discover</div><div class="tab" data-a="go" data-v="dashboard"><div class="t3 purp" style="width:32px;height:32px"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="7" height="7" rx="2"/><rect x="13" y="4" width="7" height="7" rx="2"/><rect x="4" y="13" width="7" height="7" rx="2"/><rect x="13" y="13" width="7" height="7" rx="2"/></svg></div>Dashboard</div><div class="tab" data-a="go" data-v="ai"><div class="t3 blue" style="width:32px;height:32px"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M11 3l1.800 5.200L18 10l-5.200 1.800L11 17l-1.800-5.200L4 10l5.200-1.800z"/></svg></div>AI</div><div class="tab" data-a="go" data-v="wallet"><div class="t3 orng" style="width:32px;height:32px"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h14a2 2 0 012 2v9a2 2 0 01-2 2H6a2 2 0 01-2-2zM4 7l2-3h10M16 13.500h.1"/></svg></div>Wallet</div><div class="tab" data-a="go" data-v="shop"><div class="t3 red" style="width:32px;height:32px"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9l1.500-5h13L20 9M4 9v11h16V9M4 9h16M9 20v-6h6v6"/></svg></div>Marketplace</div></div><div class="ov" id="ov"></div><div class="ov" id="cf"></div><script>var S={route:'discover',q:'',cat:'All',cid:null,ptab:'Overview',wallet:0,bookings:[],bk:null,cf:null};
+</style></head><body><svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs><linearGradient id="vbg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#5bb8ff"/><stop offset=".5" stop-color="#1d9bf0"/><stop offset="1" stop-color="#0a66d0"/></linearGradient><radialGradient id="vbr" cx=".32" cy=".25" r=".75"><stop offset="0" stop-color="#fff" stop-opacity=".45"/><stop offset=".55" stop-color="#fff" stop-opacity="0"/><stop offset="1" stop-color="#003c8f" stop-opacity=".35"/></radialGradient></defs></svg><div class="stage"><div id="app"></div></div><button type="button" class="black" id="bkb" style="">Book this creator</button><div class="glass tbar"><i class="drop"></i><div class="tab on" data-a="go" data-v="discover"><div class="t3 teal" style="width:32px;height:32px"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M15.500 8.500l-2 5-5 2 2-5z"/></svg></div>Discover</div><div class="tab" data-a="go" data-v="dashboard"><div class="t3 purp" style="width:32px;height:32px"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="7" height="7" rx="2"/><rect x="13" y="4" width="7" height="7" rx="2"/><rect x="4" y="13" width="7" height="7" rx="2"/><rect x="13" y="13" width="7" height="7" rx="2"/></svg></div>Dashboard</div><div class="tab" data-a="go" data-v="ai"><div class="t3 blue" style="width:32px;height:32px"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M11 3l1.800 5.200L18 10l-5.200 1.800L11 17l-1.800-5.200L4 10l5.200-1.800z"/></svg></div>AI</div><div class="tab" data-a="go" data-v="wallet"><div class="t3 orng" style="width:32px;height:32px"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h14a2 2 0 012 2v9a2 2 0 01-2 2H6a2 2 0 01-2-2zM4 7l2-3h10M16 13.500h.1"/></svg></div>Wallet</div><div class="tab" data-a="go" data-v="shop"><div class="t3 red" style="width:32px;height:32px"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9l1.500-5h13L20 9M4 9v11h16V9M4 9h16M9 20v-6h6v6"/></svg></div>Marketplace</div></div><div class="ov" id="ov"></div><div class="ov" id="cf"></div><script>var S={route:'discover',q:'',cat:'All',cid:null,ptab:'Overview',wallet:0,bookings:[],bk:null,cf:null};
 var P={star8:'<path d="M12 3v18M3 12h18M5.600 5.600l12.800 12.800M18.400 5.600L5.600 18.400"/>',bell:'<path d="M6 16v-5a6 6 0 1112 0v5l1.500 2h-15zM10 21h4"/>',menu:'<path d="M4 7h16M4 12h16M4 17h16"/>',search:'<circle cx="11" cy="11" r="6.500"/><path d="M16 16l4 4"/>',back:'<path d="M19 12H5M11 6l-6 6 6 6"/>',x:'<path d="M6 6l12 12M18 6L6 18"/>',chev:'<path d="M9 6l6 6-6 6"/>',users:'<circle cx="9" cy="8" r="3.500"/><path d="M3 20a6 6 0 0112 0M16 5a3.500 3.500 0 010 7M18 14a6 6 0 013 6"/>',eye:'<path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>',star:'<path d="M12 3l2.700 5.600 6.100.9-4.400 4.300 1 6.100L12 17l-5.400 2.900 1-6.100L3.200 9.500l6.100-.9z"/>',pin:'<path d="M12 21s7-6 7-11a7 7 0 10-14 0c0 5 7 11 7 11z"/><circle cx="12" cy="10" r="2.500"/>',radio:'<circle cx="12" cy="12" r="2"/><path d="M8 8a5.700 5.700 0 000 8M16 8a5.700 5.700 0 010 8M5 5a10 10 0 000 14M19 5a10 10 0 010 14"/>',cal:'<rect x="4" y="5" width="16" height="15" rx="3"/><path d="M8 3v4M16 3v4M4 10h16"/>',rupee:'<path d="M7 4.500h10M7 9h10M10 4.500a4.250 4.250 0 010 8.500H7l7.500 7"/>',swap:'<path d="M4 8h14l-3-3M20 16H6l3 3"/>',wallet:'<path d="M4 7h14a2 2 0 012 2v9a2 2 0 01-2 2H6a2 2 0 01-2-2zM4 7l2-3h10M16 13.500h.1"/>',card:'<rect x="3" y="6" width="18" height="13" rx="3"/><path d="M3 11h18"/>',lock:'<rect x="5" y="11" width="14" height="9" rx="3"/><path d="M8 11V8a4 4 0 018 0v3"/>',shield:'<path d="M12 3l7 3v6c0 4.500-3 7.500-7 9-4-1.500-7-4.500-7-9V6z"/><path d="M9 12l2 2 4-4"/>',ok:'<circle cx="12" cy="12" r="9"/><path d="M8 12.500l3 3 5-6"/>',up:'<path d="M12 16V5M7 10l5-5 5 5M5 19h14"/>',compass:'<circle cx="12" cy="12" r="9"/><path d="M15.500 8.500l-2 5-5 2 2-5z"/>',dash:'<rect x="4" y="4" width="7" height="7" rx="2"/><rect x="13" y="4" width="7" height="7" rx="2"/><rect x="4" y="13" width="7" height="7" rx="2"/><rect x="13" y="13" width="7" height="7" rx="2"/>',spark:'<path d="M11 3l1.800 5.200L18 10l-5.200 1.800L11 17l-1.800-5.200L4 10l5.200-1.800zM19 15v4M17 17h4"/>',shop:'<path d="M4 9l1.500-5h13L20 9M4 9v11h16V9M4 9h16M9 20v-6h6v6"/>',plus:'<path d="M12 5v14M5 12h14"/>'};
 function ic(p,x){return '<svg viewBox="0 0 24 24" aria-hidden="true" '+(x||'')+'>'+P[p]+'</svg>'}
-var PKM={'star8':'sparkles','bell':'bell','menu':'menu','back':'back','cam':'image','dash':'chart-no-axes-combined','flame':'chart-no-axes-combined','spark':'sparkles','wallet':'wallet','ok':'check-circle','shop':'shopping-bag','clock':'clock','rupee':'indian-rupee','eye':'eye','radio':'globe','star':'star','users':'users','alert':'alert-triangle','bank':'bank','card':'credit-card','swap':'repeat-2','doc':'file-text','ph':'phone','rs':'indian-rupee','tag':'tag','up':'upload','plus':'plus','user':'user-round','pin':'map-pin','lock':'lock-keyhole','shield':'shield-check','compass':'compass','cal':'calendar-check','x':'x','search':'search'};function pk(n){return '<img src="icons/'+(PKM[n]||n)+'.png" alt="" draggable="false">'}
 function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]})}
 function inr(n){return '₹'+Number(n).toLocaleString('en-IN')}
 function $(s){return document.querySelector(s)}
@@ -2307,32 +2230,32 @@ function cr(id){return C.filter(function(c){return c.id==id})[0]}
 var sp=[];for(var i=0;i<120;i++){var a=i/120*2*Math.PI,r=10.5+.9*Math.cos(8*a);sp.push((12+r*Math.cos(a-Math.PI/2)).toFixed(2)+' '+(12+r*Math.sin(a-Math.PI/2)).toFixed(2))}
 var SEAL='M'+sp.join('L')+'Z';
 var badge='<svg class="vb" viewBox="0 0 24 24" aria-label="Verified"><path d="'+SEAL+'" fill="url(#vbg)"/><path d="'+SEAL+'" fill="url(#vbr)"/><path d="M6.200 8.200C8 4.800 12 3.300 15.600 4.400 12.200 5 8.800 6.400 6.200 8.200z" fill="#fff" opacity=".55"/><path d="M7.700 12.500l3 3 5.700-6.500" fill="none" stroke="#0a5fc4" stroke-opacity=".35" stroke-width="2.700" stroke-linecap="round" stroke-linejoin="round" transform="translate(0 .7)"/><path d="M7.700 12.500l3 3 5.700-6.500" fill="none" stroke="#fff" stroke-width="2.500" stroke-linecap="round" stroke-linejoin="round"/></svg>';
-function avatar(s){return '<div class="t3 pk blk" style="width:'+s+'px;height:'+s+'px">'+pk('star8')+'</div>'}
+function avatar(s){return '<div class="t3 blk" style="width:'+s+'px;height:'+s+'px">'+ic('star8')+'</div>'}
 function btn(txt,a,v,cls,ico,dis){return '<button type="button" class="black '+(cls||'')+'" data-a="'+a+'" data-v="'+(v==null?'':v)+'" '+(dis?'disabled style="opacity:.45;pointer-events:none;width:100%;height:52px;border-radius:26px"':'style="width:100%;height:52px;border-radius:26px"')+'>'+(ico?ic(ico,'class="ico" style="width:19px;height:19px"'):'')+txt+'</button>'}
 function ghost(txt,a,ico){return '<button type="button" class="tag glass" data-a="'+a+'" style="border:0;font:inherit;font-weight:700;font-size:14px">'+(ico?ic(ico):'')+txt+'</button>'}
-function empty(t,s,b){return '<div class="glass card empty" style="padding:30px 22px"><div class="t3 pk gry bob" style="width:56px;height:56px">'+pk('spark')+'</div><h2 style="margin-top:14px">'+t+'</h2><p class="sub">'+s+'</p>'+(b||'')+'</div>'}
-function stat(i,c,v,l){return '<div class="glass stat"><div class="t3 pk '+c+'" style="width:42px;height:42px">'+pk(i)+'</div><div><div style="font-size:21px;font-weight:800;line-height:1">'+v+'</div><div style="margin-top:3px;font-size:13px;color:#55616d">'+l+'</div></div></div>'}
+function empty(t,s,b){return '<div class="glass card empty" style="padding:30px 22px"><div class="t3 gry bob" style="width:56px;height:56px">'+ic('spark')+'</div><h2 style="margin-top:14px">'+t+'</h2><p class="sub">'+s+'</p>'+(b||'')+'</div>'}
+function stat(i,c,v,l){return '<div class="glass stat"><div class="t3 '+c+'" style="width:42px;height:42px">'+ic(i)+'</div><div><div style="font-size:21px;font-weight:800;line-height:1">'+v+'</div><div style="margin-top:3px;font-size:13px;color:#55616d">'+l+'</div></div></div>'}
 function rows(a){return a.map(function(r){return '<div style="display:flex;justify-content:space-between;gap:12px;padding:9px 0;font-size:14.5px"><span style="color:#55616d">'+r[0]+'</span><b>'+r[1]+'</b></div>'}).join('')}
-function card(c){return '<div class="glass card" data-a="open" data-v="'+c.id+'" style="cursor:pointer;padding:14px"><div style="display:flex;gap:12px;align-items:center">'+avatar(52)+'<div style="flex:1;min-width:0"><div style="font-size:17px;font-weight:800">'+c.name+' '+badge+'</div><div class="sub" style="margin:0;font-size:13px">@'+c.h+' · '+c.plat+'</div><div style="display:flex;gap:10px;margin-top:4px;font-size:12.5px;color:#55616d"><span>'+c.fol+' followers</span><span>★ '+c.rate+'</span><span>'+c.city+'</span></div></div>'+ic('chev','class="chev"')+'</div><div style="display:flex;align-items:center;gap:10px;margin-top:12px"><span class="tag glass" style="height:30px;font-size:12px;cursor:default">'+c.niche+'</span><span style="flex:1;font-size:13.5px;color:#55616d">from <b style="color:#0b1217">'+inr(c.from)+'</b></span><button type="button" class="black" data-a="book" data-v="'+c.id+'" style="height:42px;padding:0 22px;border-radius:21px;font-size:14.5px">Book</button></div></div>'}
+function card(c){return '<div class="glass card" data-a="open" data-v="'+c.id+'" style="cursor:pointer;padding:14px"><div style="display:flex;gap:12px;align-items:center">'+avatar(52)+'<div style="flex:1;min-width:0"><div style="font-size:17px;font-weight:800">'+esc(c.name)+' '+badge+'</div><div class="sub" style="margin:0;font-size:13px">@'+esc(c.h)+' · '+esc(c.plat)+'</div><div style="display:flex;gap:10px;margin-top:4px;font-size:12.5px;color:#55616d"><span>'+c.fol+' followers</span><span>★ '+c.rate+'</span><span>'+esc(c.city)+'</span></div></div>'+ic('chev','class="chev"')+'</div><div style="display:flex;align-items:center;gap:10px;margin-top:12px"><span class="tag glass" style="height:30px;font-size:12px;cursor:default">'+esc(c.niche)+'</span><span style="flex:1;font-size:13.5px;color:#55616d">from <b style="color:#0b1217">'+inr(c.from)+'</b></span><button type="button" class="black" data-a="book" data-v="'+c.id+'" style="height:42px;padding:0 22px;border-radius:21px;font-size:14.5px">Book</button></div></div>'}
 function listHTML(){var q=S.q.toLowerCase(),l=C.filter(function(c){return (S.cat=='All'||c.niche==S.cat)&&(c.name+' '+c.h+' '+c.niche+' '+c.city).toLowerCase().indexOf(q)>-1});
 return '<div class="hint" style="margin:0 0 0 4px">'+l.length+' creator'+(l.length==1?'':'s')+' available</div>'+(l.length?l.map(card).join(''):empty('No creators found','Try a different search or category.'))}
-function discover(){return '<div class="hdr"><div style="display:flex;gap:10px;align-items:center">'+avatar(40)+'<div><div style="font-size:22px;font-weight:800;letter-spacing:-.4px">Collancer</div><div style="font-size:10px;font-weight:800;letter-spacing:.8px;color:#0e7490">WHERE INFLUENCE MEETS INDUSTRY</div></div></div><div style="display:flex;gap:8px"><div class="t3 pk yel" style="width:38px;height:38px">'+pk('bell')+'</div><div class="t3 pk blk" style="width:38px;height:38px">'+pk('menu')+'</div></div></div><div class="body" style="padding-top:16px"><div class="glass search">'+ic('search','class="ico" style="width:19px;height:19px"')+'<input id="q" value="'+esc(S.q)+'" placeholder="Search name, handle, niche..." style="all:unset;flex:1;min-width:0;color:#0b1217" aria-label="Search"></div><div class="cr" style="display:flex;gap:8px;overflow-x:auto;padding:2px 2px 6px">'+CATS.map(function(k){return '<div class="tag '+(k==S.cat?'on':'glass')+'" data-a="cat" data-v="'+k+'" style="flex:none">'+k+'</div>'}).join('')+'</div><div id="list" style="display:flex;flex-direction:column;gap:12px">'+listHTML()+'</div></div>'}
+function discover(){return '<div class="hdr"><div style="display:flex;gap:10px;align-items:center">'+avatar(40)+'<div><div style="font-size:22px;font-weight:800;letter-spacing:-.4px">Collancer</div><div style="font-size:10px;font-weight:800;letter-spacing:.8px;color:#0e7490">WHERE INFLUENCE MEETS INDUSTRY</div></div></div><div style="display:flex;gap:8px"><div class="t3 yel" style="width:38px;height:38px">'+ic('bell')+'</div><div class="t3 blk" style="width:38px;height:38px">'+ic('menu')+'</div></div></div><div class="body" style="padding-top:16px"><div class="glass search">'+ic('search','class="ico" style="width:19px;height:19px"')+'<input id="q" value="'+esc(S.q)+'" placeholder="Search name, handle, niche..." style="all:unset;flex:1;min-width:0;color:#0b1217" aria-label="Search"></div><div class="cr" style="display:flex;gap:8px;overflow-x:auto;padding:2px 2px 6px">'+CATS.map(function(k){return '<div class="tag '+(k==S.cat?'on':'glass')+'" data-a="cat" data-v="'+k+'" style="flex:none">'+k+'</div>'}).join('')+'</div><div id="list" style="display:flex;flex-direction:column;gap:12px">'+listHTML()+'</div></div>'}
 function profile(){var c=cr(S.cid),t=S.ptab,b;
 if(t=='Overview')b='<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">'+stat('users','teal',c.fol,'Followers')+stat('eye','purp',c.views,'Avg. views')+stat('star','yel',c.rate,'Rating')+stat('radio','grn',c.reach,'Est. reach')+'</div><div class="glass card"><h2>Campaign estimates</h2>'+rows([['Estimated likes',c.likes],['Estimated reach',c.reach],['Conversion range',c.conv+' actions']])+'<div class="hint" style="margin:6px 0 0">Estimates are derived from the creator\'s reported audience stats.</div></div><div class="glass card"><h2>Pricing</h2><div class="hint" style="margin:2px 0 6px">Set by the creator. Prices are locked at booking.</div>'+c.pk.map(function(p){return '<div style="display:flex;justify-content:space-between;align-items:center;padding:9px 0;border-top:1px solid rgba(15,40,60,.08)"><div><div style="font-weight:800;font-size:15px">'+p[0]+'</div><div style="font-size:13px;color:#55616d">'+p[1]+'</div></div><b style="font-size:16px">'+inr(p[2])+'</b></div>'}).join('')+'</div><div class="glass card"><h2>Promotion categories</h2><div class="tags"><span class="tag glass" style="cursor:default">'+c.niche+'</span></div></div>';
 else if(t=='Analytics')b='<div class="glass card"><h2>Audience analytics</h2>'+rows([['Followers',c.fol],['Avg. views per post',c.views],['Est. reach',c.reach],['Rating',c.rate+' / 5']])+'</div>';
 else b=empty(t=='Portfolio'?'No portfolio yet':'No reviews yet',t=='Portfolio'?'This creator has not added demo content.':'Reviews appear after completed bookings.');
-return '<div class="hdr" style="justify-content:flex-start"><div class="t3 pk blk" data-a="home" style="width:42px;height:42px;cursor:pointer" role="button" aria-label="Back">'+pk('back')+'</div></div><div class="body" style="padding-top:14px"><div class="glass card"><div style="display:flex;gap:14px;align-items:center">'+avatar(76)+'<div><div style="font-size:21px;font-weight:800">'+c.name+' '+badge+'</div><div class="sub" style="margin:0">@'+c.h+'</div><div class="tags"><span class="tag glass" style="height:30px;font-size:12px;cursor:default">'+c.plat+'</span><span class="tag glass" style="height:30px;font-size:12px;cursor:default;color:#0e7490">'+c.niche+'</span></div></div></div><div class="hint" style="margin:12px 0 0">'+c.city+'</div></div><div class="glass seg">'+['Overview','Portfolio','Analytics','Reviews'].map(function(k){return '<div class="'+(k==t?'on':'')+'" data-a="ptab" data-v="'+k+'" style="padding:11px 0">'+k+'</div>'}).join('')+'</div>'+b+'</div>'}
+return '<div class="hdr" style="justify-content:flex-start"><div class="t3 blk" data-a="home" style="width:42px;height:42px;cursor:pointer" role="button" aria-label="Back">'+ic('back')+'</div></div><div class="body" style="padding-top:14px"><div class="glass card"><div style="display:flex;gap:14px;align-items:center">'+avatar(76)+'<div><div style="font-size:21px;font-weight:800">'+c.name+' '+badge+'</div><div class="sub" style="margin:0">@'+c.h+'</div><div class="tags"><span class="tag glass" style="height:30px;font-size:12px;cursor:default">'+c.plat+'</span><span class="tag glass" style="height:30px;font-size:12px;cursor:default;color:#0e7490">'+c.niche+'</span></div></div></div><div class="hint" style="margin:12px 0 0">'+c.city+'</div></div><div class="glass seg">'+['Overview','Portfolio','Analytics','Reviews'].map(function(k){return '<div class="'+(k==t?'on':'')+'" data-a="ptab" data-v="'+k+'" style="padding:11px 0">'+k+'</div>'}).join('')+'</div>'+b+'</div>'}
 S.f='All';S.email='jainiks517@gmail.com';S.name='Jainik Shah';S.av='';S.edit=false;S.lo=false;
 Object.assign(P,{flame:'<path d="M12 3c1 3 5 5 5 10a5 5 0 01-10 0c0-2 1-3 2-4 .3 1.200 1 2 2 2 0-3-1-5 1-8z"/>',clock:'<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',gift:'<rect x="4" y="9" width="16" height="11" rx="2"/><path d="M3 9h18M12 9v11M12 9c-3 0-4-4-1-4 2 0 1 4 1 4zm0 0c3 0 4-4 1-4-2 0-1 4-1 4z"/>',crown:'<path d="M4 8l4 4 4-6 4 6 4-4-2 11H6z"/>',life:'<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3.500"/><path d="M5.600 5.600l3.900 3.900M14.500 14.500l3.900 3.900M18.400 5.600l-3.900 3.900M9.500 14.500l-3.900 3.900"/>',doc:'<path d="M7 3h7l5 5v13H7zM14 3v5h5M10 13h6M10 17h6"/>',pencil:'<path d="M4 20l1-4L16 5l3 3L8 19zM14 7l3 3"/>',cam:'<path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.500"/>',out:'<path d="M9 4H6a2 2 0 00-2 2v12a2 2 0 002 2h3M15 8l4 4-4 4M19 12H9"/>'});
-function hdrB(){return '<div class="hdr"><div style="display:flex;gap:10px;align-items:center">'+avatar(40)+'<div><div style="font-size:22px;font-weight:800;letter-spacing:-.4px">Collancer</div><div style="font-size:10px;font-weight:800;letter-spacing:.8px;color:#0e7490">WHERE INFLUENCE MEETS INDUSTRY</div></div></div><div style="display:flex;gap:8px"><div class="t3 pk yel" style="width:38px;height:38px">'+pk('bell')+'</div><div class="t3 pk blk" style="width:38px;height:38px">'+pk('menu')+'</div></div></div>'}
+function hdrB(){return '<div class="hdr"><div style="display:flex;gap:10px;align-items:center">'+avatar(40)+'<div><div style="font-size:22px;font-weight:800;letter-spacing:-.4px">Collancer</div><div style="font-size:10px;font-weight:800;letter-spacing:.8px;color:#0e7490">WHERE INFLUENCE MEETS INDUSTRY</div></div></div><div style="display:flex;gap:8px"><div class="t3 yel" style="width:38px;height:38px">'+ic('bell')+'</div><div class="t3 blk" style="width:38px;height:38px">'+ic('menu')+'</div></div></div>'}
 function toast(m){var t=$('#toast');if(!t){t=document.createElement('div');t.id='toast';t.style.cssText='position:fixed;left:50%;transform:translateX(-50%);bottom:calc(112px + env(safe-area-inset-bottom,0px));z-index:40;background:#0b1217;color:#fff;padding:11px 18px;border-radius:20px;font-size:14px;font-weight:700;box-shadow:0 10px 24px -8px rgba(0,0,0,.5);transition:opacity .3s';document.body.appendChild(t)}t.textContent=m;t.style.opacity=1;clearTimeout(t.h);t.h=setTimeout(function(){t.style.opacity=0},2000)}
 function dashboard(){var bk=S.bookings,spend=bk.reduce(function(a,k){return a+k.total},0),lab={Pending:'Awaiting creator'},fl=S.f=='All'?bk:bk.filter(function(k){return lab[S.f]==='Awaiting creator'&&S.f=='Pending'});
-function st(i,c,v,l){return '<div class="glass stat" style="flex-direction:column;align-items:flex-start;gap:10px;padding:14px 16px"><div class="t3 pk '+c+'" style="width:36px;height:36px">'+pk(i)+'</div><div><div style="font-size:22px;font-weight:800;line-height:1">'+v+'</div><div style="margin-top:3px;font-size:13.5px;color:#55616d">'+l+'</div></div></div>'}
+function st(i,c,v,l){return '<div class="glass stat" style="flex-direction:column;align-items:flex-start;gap:10px;padding:14px 16px"><div class="t3 '+c+'" style="width:36px;height:36px">'+ic(i)+'</div><div><div style="font-size:22px;font-weight:800;line-height:1">'+v+'</div><div style="margin-top:3px;font-size:13.5px;color:#55616d">'+l+'</div></div></div>'}
 function qb(i,t,a,v){return '<div class="tag glass" data-a="'+a+'" data-v="'+v+'" style="height:54px;border-radius:27px;justify-content:center;gap:10px;font-size:16px"><span style="display:flex;width:22px;height:22px">'+ic(i,'style="width:22px;height:22px"')+'</span>'+t+'</div>'}
 function lr(i,t,m){return '<div data-a="toast" data-v="'+m+'" style="display:flex;align-items:center;gap:12px;padding:14px 0;cursor:pointer;border-top:1px solid rgba(15,40,60,.08)"><span style="display:flex;width:22px;height:22px;color:#55616d">'+ic(i,'style="width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round"')+'</span><b style="flex:1;font-size:15.5px">'+t+'</b>'+ic('chev','class="chev"')+'</div>'}
-var nm=S.edit?'<div class="f ft" style="flex:1;padding:8px 14px;border-radius:16px"><input id="nm" maxlength="40" value="'+esc(S.name)+'" aria-label="Name"></div><div class="glass circ pkb" data-a="savenm" style="width:40px;height:40px;flex:none" role="button" aria-label="Save name">'+pk('check')+'</div>':'<div style="font-size:22px;font-weight:800;letter-spacing:-.3px">'+esc(S.name)+'</div><div class="glass circ pkb" data-a="edit" style="width:40px;height:40px;flex:none" role="button" aria-label="Edit name">'+pk('pencil')+'</div>';
-var av='<div style="position:relative;width:76px"><div class="glass" style="width:76px;height:76px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:30px;font-weight:800;color:#0e7490;'+(S.av?'background:center/cover url('+S.av+')':'')+'">'+(S.av?'':esc(S.name.charAt(0).toUpperCase()))+'</div><div class="t3 pk blk" data-a="avpick" style="position:absolute;right:-8px;bottom:-4px;width:30px;height:30px;cursor:pointer" role="button" aria-label="Change photo">'+pk('cam')+'</div><input type="file" id="avf" accept="image/*" hidden></div>';
-var list=fl.length?fl.map(function(k){return '<div class="glass card"><div style="display:flex;justify-content:space-between;gap:10px"><div><div style="font-size:17px;font-weight:800">'+esc(k.camp)+'</div><div class="sub" style="margin:2px 0 0">'+esc(k.creator)+' · '+esc(k.pkg)+'</div></div><span class="tag glass" style="height:28px;font-size:11.5px;cursor:default;flex:none;color:#0e7490">Awaiting creator</span></div>'+rows([['Type',k.type=='paid'?'Paid':'Barter'],['Deadline',esc(k.deadline)],['Total',inr(k.total)],['Order ID',esc(k.oid)]])+'</div>'}).join(''):'<div class="glass card empty" style="padding:30px 22px"><div class="t3 pk gry bob" style="width:56px;height:56px">'+pk('dash')+'</div><h2 style="margin-top:14px">'+(bk.length?'No '+S.f.toLowerCase()+' campaigns':'No campaigns yet')+'</h2><p class="sub">Discover creators and send your first booking request to get started.</p><div style="margin-top:16px;width:100%">'+btn('Discover creators','go','discover')+'</div></div>';
+var nm=S.edit?'<div class="f ft" style="flex:1;padding:8px 14px;border-radius:16px"><input id="nm" maxlength="40" value="'+esc(S.name)+'" aria-label="Name"></div><div class="glass circ" data-a="savenm" style="width:40px;height:40px;flex:none" role="button" aria-label="Save name">'+ic('ok','class="ico"')+'</div>':'<div style="font-size:22px;font-weight:800;letter-spacing:-.3px">'+esc(S.name)+'</div><div class="glass circ" data-a="edit" style="width:40px;height:40px;flex:none" role="button" aria-label="Edit name">'+ic('pencil','class="ico"')+'</div>';
+var av='<div style="position:relative;width:76px"><div class="glass" style="width:76px;height:76px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:30px;font-weight:800;color:#0e7490;'+(S.av?'background:center/cover url('+S.av+')':'')+'">'+(S.av?'':esc(S.name.charAt(0).toUpperCase()))+'</div><div class="t3 blk" data-a="avpick" style="position:absolute;right:-8px;bottom:-4px;width:30px;height:30px;cursor:pointer" role="button" aria-label="Change photo">'+ic('cam')+'</div><input type="file" id="avf" accept="image/*" hidden></div>';
+var list=fl.length?fl.map(function(k){return '<div class="glass card"><div style="display:flex;justify-content:space-between;gap:10px"><div><div style="font-size:17px;font-weight:800">'+esc(k.camp)+'</div><div class="sub" style="margin:2px 0 0">'+esc(k.creator)+' · '+esc(k.pkg)+'</div></div><span class="tag glass" style="height:28px;font-size:11.5px;cursor:default;flex:none;color:#0e7490">Awaiting creator</span></div>'+rows([['Type',k.type=='paid'?'Paid':'Barter'],['Deadline',esc(k.deadline)],['Total',inr(k.total)],['Order ID',esc(k.oid)]])+'</div>'}).join(''):'<div class="glass card empty" style="padding:30px 22px"><div class="t3 gry bob" style="width:56px;height:56px">'+ic('dash')+'</div><h2 style="margin-top:14px">'+(bk.length?'No '+S.f.toLowerCase()+' campaigns':'No campaigns yet')+'</h2><p class="sub">Discover creators and send your first booking request to get started.</p><div style="margin-top:16px;width:100%">'+btn('Discover creators','go','discover')+'</div></div>';
 return hdrB()+'<div class="body" style="padding-top:16px"><div class="glass card"><div style="display:flex;justify-content:space-between;align-items:flex-start">'+av+'</div><div style="display:flex;align-items:center;gap:10px;margin-top:14px">'+nm+'</div><div class="sub" style="margin:4px 0 10px">'+esc(S.email)+'</div><span class="tag glass" style="height:30px;font-size:12px;cursor:default;width:max-content">FREE PLAN</span><div style="margin-top:16px;padding-top:16px;border-top:1px solid rgba(15,40,60,.08)"><div class="tag glass" data-a="lo" style="height:50px;border-radius:25px;justify-content:center;gap:10px;font-size:15.5px;'+(S.lo?'color:#e11d48':'')+'">'+ic('out')+(S.lo?'Tap again to log out':'Log out')+'</div></div></div>'
 +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">'+st('flame','orng',0,'Active campaigns')+st('clock','teal',bk.length,'Pending requests')+st('ok','grn',0,'Completed')+st('rupee','purp',inr(spend),'Total spend')+'</div>'
 +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">'+qb('wallet','Wallet','go','wallet')+qb('gift','Referrals','toast','Referrals open in the app')+qb('crown','Pro','toast','Pro plans open in the app')+qb('life','Support','toast','Support opens in the app')+'</div>'
@@ -2343,13 +2266,13 @@ function now(){return new Date().toLocaleString('en-IN',{day:'numeric',month:'sh
 function rid(){return Math.random().toString(36).slice(2,10).toUpperCase()}
 function addMoney(n,id){S.wallet+=n;S.dep.unshift({amt:n,id:id||'DEP_'+rid(),date:now()});S.tx.unshift({t:'Wallet deposit',amt:n,s:'+',date:now()})}
 function txd(t,n){S.tx.unshift({t:t,amt:n,s:'-',date:now()})}
-function wEmpty(i,t,s){return '<div class="glass card empty" style="padding:28px 22px"><div class="t3 pk teal" style="width:54px;height:54px">'+pk(i)+'</div><h2 style="margin-top:14px;font-size:19px">'+t+'</h2><p class="sub" style="font-size:13.5px">'+s+'</p></div>'}
+function wEmpty(i,t,s){return '<div class="glass card empty" style="padding:28px 22px"><div class="t3 teal" style="width:54px;height:54px">'+ic(i)+'</div><h2 style="margin-top:14px;font-size:19px">'+t+'</h2><p class="sub" style="font-size:13.5px">'+s+'</p></div>'}
 function wrow(a,b,r,c,x){return '<div style="display:flex;justify-content:space-between;align-items:center;gap:12px;padding:11px 0;border-top:1px solid rgba(15,40,60,.08)"><div style="min-width:0"><div style="font-weight:800;font-size:15px">'+a+'</div><div style="font-size:12.5px;color:#55616d">'+b+'</div></div><div style="text-align:right;flex:none"><b style="font-size:16px;color:'+c+'">'+r+'</b>'+(x||'')+'</div></div>'}
-function wallet(){return hdrB()+'<div class="body" style="padding-top:16px"><div class="glass card" style="background:linear-gradient(180deg,#3a3d44 0,#16181c 46%,#000 100%);color:#fff"><div style="display:flex;gap:14px;align-items:center"><div class="t3 pk teal" style="width:56px;height:56px">'+pk('wallet')+'</div><div><div style="font-size:14px;opacity:.7">Wallet balance</div><div style="font-size:36px;font-weight:800;letter-spacing:-1px;line-height:1.1">'+inr(S.wallet)+'</div></div></div><button type="button" class="black" data-a="addmoney" style="width:100%;height:52px;margin-top:16px;border-radius:26px;color:#053a45;background:linear-gradient(180deg,#a5f3fc,#22d3ee 50%,#0891b2);border-color:#0e7490">'+ic('plus','class="ico" style="stroke:#053a45!important;width:20px;height:20px"')+'Add money</button></div>'
+function wallet(){return hdrB()+'<div class="body" style="padding-top:16px"><div class="glass card" style="background:linear-gradient(180deg,#3a3d44 0,#16181c 46%,#000 100%);color:#fff"><div style="display:flex;gap:14px;align-items:center"><div class="t3 teal" style="width:56px;height:56px">'+ic('wallet')+'</div><div><div style="font-size:14px;opacity:.7">Wallet balance</div><div style="font-size:36px;font-weight:800;letter-spacing:-1px;line-height:1.1">'+inr(S.wallet)+'</div></div></div><button type="button" class="black" data-a="addmoney" style="width:100%;height:52px;margin-top:16px;border-radius:26px;color:#053a45;background:linear-gradient(180deg,#a5f3fc,#22d3ee 50%,#0891b2);border-color:#0e7490">'+ic('plus','class="ico" style="stroke:#053a45!important;width:20px;height:20px"')+'Add money</button></div>'
 +'<h2 style="font-size:24px;margin:6px 0 0 4px">Deposit requests</h2>'+(S.dep.length?'<div class="glass card" style="padding:4px 18px">'+S.dep.map(function(d,i){return wrow(inr(d.amt),d.date+' · '+d.id,'Completed','#059669').replace('border-top:1px solid rgba(15,40,60,.08)',i?'border-top:1px solid rgba(15,40,60,.08)':'')}).join('')+'</div>':wEmpty('bank','No deposits yet','Top up your wallet to pay creators instantly from your balance.'))
 +'<h2 style="font-size:24px;margin:6px 0 0 4px">Transactions</h2>'+(S.tx.length?'<div class="glass card" style="padding:4px 18px">'+S.tx.map(function(d,i){return wrow(esc(d.t),d.date,d.s+inr(d.amt),d.s=='+'?'#059669':'#e11d48').replace('border-top:1px solid rgba(15,40,60,.08)',i?'border-top:1px solid rgba(15,40,60,.08)':'')}).join('')+'</div>':wEmpty('alert','No transactions','Wallet debits, deposits and refunds will appear here.'))+'</div>'}
 function amSheet(){var a=S.am||0;var o=$('#am');if(!o){o=document.createElement('div');o.id='am';o.className='ov';document.body.appendChild(o)}
-o.className='ov on';o.innerHTML='<div class="dim"></div><div class="w"><div class="glass sh"><div class="grab"></div><div style="display:flex;align-items:center;padding:0 20px"><div style="flex:1"><div style="font-size:21px;font-weight:800">Add money</div><div class="sub" style="margin:2px 0 0;font-size:13px">Demo top-up. No real money moves.</div></div><div class="glass circ pkb" data-a="amx" style="width:38px;height:38px" role="button" aria-label="Close">'+pk('x')+'</div></div><div class="sc"><label style="margin-top:0">Amount (₹)</label><div class="f ft"><input id="amv" type="number" inputmode="numeric" min="100" max="100000" placeholder="Enter amount" value="'+(a||'')+'"></div><div id="amerr" class="hint" style="color:#e11d48;font-weight:700"></div><div class="tags" style="margin-top:12px">'+[500,1000,2000,5000].map(function(n){return '<div class="tag glass" data-a="amq" data-v="'+n+'">+'+inr(n)+'</div>'}).join('')+'</div><div style="margin-top:18px">'+btn('Add money','amgo','','','plus')+'</div></div></div></div>'}
+o.className='ov on';o.innerHTML='<div class="dim"></div><div class="w"><div class="glass sh"><div class="grab"></div><div style="display:flex;align-items:center;padding:0 20px"><div style="flex:1"><div style="font-size:21px;font-weight:800">Add money</div><div class="sub" style="margin:2px 0 0;font-size:13px">Demo top-up. No real money moves.</div></div><div class="glass circ" data-a="amx" style="width:38px;height:38px" role="button" aria-label="Close">'+ic('x','class="ico"')+'</div></div><div class="sc"><label style="margin-top:0">Amount (₹)</label><div class="f ft"><input id="amv" type="number" inputmode="numeric" min="100" max="100000" placeholder="Enter amount" value="'+(a||'')+'"></div><div id="amerr" class="hint" style="color:#e11d48;font-weight:700"></div><div class="tags" style="margin-top:12px">'+[500,1000,2000,5000].map(function(n){return '<div class="tag glass" data-a="amq" data-v="'+n+'">+'+inr(n)+'</div>'}).join('')+'</div><div style="margin-top:18px">'+btn('Add money','amgo','','','plus')+'</div></div></div></div>'}
 function soon(t){return '<div class="hdr"><div style="font-size:24px;font-weight:800;letter-spacing:-.5px">'+t+'</div></div><div class="body" style="padding-top:16px">'+empty('Coming soon','This section is not part of the booking flow.')+'</div>'}
 function render(){var r=S.route;$('#app').innerHTML=r=='discover'?discover():r=='profile'?profile():r=='dashboard'?dashboard():r=='wallet'?wallet():r=='shop'?market():r=='ai'?'':soon('Collancer AI');$('#bkb').style.display=r=='profile'?'flex':'none';if(window.aiSet)window.aiSet(r=='ai')}
 function drop(a){var b=$('.tbar'),t=b.querySelector('.tab.on'),d=b.querySelector('.drop');d.style.left=(t.offsetLeft+(t.offsetWidth-58)/2)+'px';if(a){d.classList.remove('drip');void d.offsetWidth;d.classList.add('drip')}}
@@ -2364,19 +2287,19 @@ var LAB=['Type','Package','Details','Review','Payment','Done'];
 function fld(k,l,ph,ty,rq){var b=S.bk;return '<label>'+l+(rq?' *':'')+'</label><div class="f ft" '+(b.err[k]?'style="box-shadow:0 0 0 1.5px #e11d48,inset 0 2px 3px rgba(15,50,80,.15)"':'')+'><input data-f="'+k+'" type="'+(ty||'text')+'" placeholder="'+ph+'" value="'+esc(b.f[k])+'"'+(ty=='date'?' min="'+today()+'"':'')+'></div>'+(b.err[k]?'<div class="hint" style="color:#e11d48;font-weight:700">'+b.err[k]+'</div>':'')}
 function area(k,l,ph,rq){var b=S.bk;return '<label>'+l+(rq?' *':'')+'</label><div class="f ta ft" '+(b.err[k]?'style="box-shadow:0 0 0 1.5px #e11d48,inset 0 2px 3px rgba(15,50,80,.15)"':'')+'><textarea data-f="'+k+'" placeholder="'+ph+'">'+esc(b.f[k])+'</textarea></div>'+(b.err[k]?'<div class="hint" style="color:#e11d48;font-weight:700">'+b.err[k]+'</div>':'')}
 function sel(k,l,o){return '<label>'+l+'</label><div class="f ft"><select data-f="'+k+'">'+o.map(function(x){return '<option'+(S.bk.f[k]==x?' selected':'')+'>'+x+'</option>'}).join('')+'</select>'+ic('chev','class="chev" style="transform:rotate(90deg)"')+'</div>'}
-function opt(a,v,on,ico,t,s){return '<div class="glass" data-a="'+a+'" data-v="'+v+'" style="cursor:pointer;padding:14px;border-radius:24px;display:flex;gap:12px;align-items:center;'+(on?'box-shadow:0 0 0 2.5px #22d3ee,0 10px 20px -10px rgba(8,145,178,.5)':'')+'"><div class="t3 pk teal" style="width:44px;height:44px">'+pk(ico)+'</div><div style="flex:1"><div style="font-size:16px;font-weight:800">'+t+'</div><div style="font-size:13px;color:#55616d;line-height:1.35">'+s+'</div></div></div>'}
+function opt(a,v,on,ico,t,s){return '<div class="glass" data-a="'+a+'" data-v="'+v+'" style="cursor:pointer;padding:14px;border-radius:24px;display:flex;gap:12px;align-items:center;'+(on?'box-shadow:0 0 0 2.5px #22d3ee,0 10px 20px -10px rgba(8,145,178,.5)':'')+'"><div class="t3 teal" style="width:44px;height:44px">'+ic(ico)+'</div><div style="flex:1"><div style="font-size:16px;font-weight:800">'+t+'</div><div style="font-size:13px;color:#55616d;line-height:1.35">'+s+'</div></div></div>'}
 function body(){var b=S.bk,c=cr(S.cid),s=b.step,h='';
 if(s==1)h='<div style="display:flex;flex-direction:column;gap:12px">'+opt('type','paid',b.type=='paid','rupee','Paid collaboration','Pay the creator package price. Funds stay in escrow until the work is approved.')+opt('type','barter',b.type=='barter','swap','Barter collaboration','Exchange products or services. No money moves, so the amount is zero.')+'</div><div style="margin-top:16px">'+btn('Continue','next')+'</div>';
 if(s==2)h='<div style="display:flex;flex-direction:column;gap:12px">'+c.pk.map(function(p,i){return '<div class="glass" data-a="pkg" data-v="'+i+'" style="cursor:pointer;padding:14px 16px;border-radius:24px;'+(b.pk===i?'box-shadow:0 0 0 2.5px #22d3ee,0 10px 20px -10px rgba(8,145,178,.5)':'')+'"><div style="display:flex;justify-content:space-between;align-items:center"><div><div style="font-size:16px;font-weight:800">'+p[0]+'</div><div style="font-size:13px;color:#55616d">'+p[1]+'</div></div><b style="font-size:18px">'+(b.type=='paid'?inr(p[2]):'Barter')+'</b></div><div style="margin-top:8px;font-size:12.5px;color:#55616d;display:flex;gap:6px;align-items:center">'+ic('lock','style="width:14px;height:14px;fill:none;stroke:currentColor;stroke-width:2"')+'Price set by creator, locked</div></div>'}).join('')+'</div><div style="display:flex;gap:10px;margin-top:16px;align-items:center">'+ghost('Back','back','back')+'<div style="flex:1">'+btn('Continue','next','','',null,b.pk===null)+'</div></div>';
-if(s==3)h=fld('campaign','Campaign name','e.g. Diwali Launch 2026','text',1)+fld('product','Product / service name','What is being promoted?','text',1)+area('brief','Campaign brief',"Goals, talking points, do's and don'ts...",1)+fld('deliverables','Deliverables','e.g. 1 reel + 2 stories')+sel('platform','Platform',['Instagram','YouTube'])+fld('deadline','Deadline','','date',1)+fld('audience','Target audience','e.g. Women 22–34, metro cities')+sel('category','Category',['Fashion','Beauty','Fitness','Food','Travel','Tech'])+fld('hashtags','Hashtags','#brand #collab')+fld('website','Website link','https://','url')+fld('cta','Call to action','e.g. Use code DIWALI20')+fld('usage','Usage rights','e.g. 90 days organic')+fld('revisions','Revisions','e.g. 2 included')+fld('exclusivity','Exclusivity','e.g. No competitor posts for 30 days')+area('other','Other requirements','Anything else the creator should know')+fld('contact','Contact number','+91 ...','tel',1)+fld('shipping','Shipping (if needed)','Courier / pickup...')+'<label>Brief media ('+b.media+'/4)</label><label class="f pkb" style="cursor:pointer;width:84px;height:84px;justify-content:center;align-items:center;margin:0">'+pk('upload')+'<input type="file" id="fl" multiple accept="image/*,video/*" style="display:none"></label><div class="hint">Images or video, stored with your campaign brief.</div><div style="display:flex;gap:10px;margin-top:16px;align-items:center">'+ghost('Back','back','back')+'<div style="flex:1">'+btn('Review','next')+'</div></div>';
+if(s==3)h=fld('campaign','Campaign name','e.g. Diwali Launch 2026','text',1)+fld('product','Product / service name','What is being promoted?','text',1)+area('brief','Campaign brief',"Goals, talking points, do's and don'ts...",1)+fld('deliverables','Deliverables','e.g. 1 reel + 2 stories')+sel('platform','Platform',['Instagram','YouTube'])+fld('deadline','Deadline','','date',1)+fld('audience','Target audience','e.g. Women 22–34, metro cities')+sel('category','Category',['Fashion','Beauty','Fitness','Food','Travel','Tech'])+fld('hashtags','Hashtags','#brand #collab')+fld('website','Website link','https://','url')+fld('cta','Call to action','e.g. Use code DIWALI20')+fld('usage','Usage rights','e.g. 90 days organic')+fld('revisions','Revisions','e.g. 2 included')+fld('exclusivity','Exclusivity','e.g. No competitor posts for 30 days')+area('other','Other requirements','Anything else the creator should know')+fld('contact','Contact number','+91 ...','tel',1)+fld('shipping','Shipping (if needed)','Courier / pickup...')+'<label>Brief media ('+b.media+'/4)</label><label class="f" style="cursor:pointer;width:84px;height:84px;justify-content:center;align-items:center;margin:0">'+ic('up','style="width:24px;height:24px;fill:none;stroke:#55616d;stroke-width:2"')+'<input type="file" id="fl" multiple accept="image/*,video/*" style="display:none"></label><div class="hint">Images or video, stored with your campaign brief.</div><div style="display:flex;gap:10px;margin-top:16px;align-items:center">'+ghost('Back','back','back')+'<div style="flex:1">'+btn('Review','next')+'</div></div>';
 if(s==4){var T=tot(),f=b.f;h='<div class="glass card" style="padding:14px"><div style="display:flex;gap:12px;align-items:center">'+avatar(44)+'<div><div style="font-weight:800">'+c.name+'</div><div class="sub" style="margin:0;font-size:13px">@'+c.h+' · '+c.pk[b.pk][0]+'</div></div></div>'+rows([['Campaign',esc(f.campaign)],['Deadline',esc(f.deadline)],['Platform',f.platform]])+'</div><div class="glass card" style="padding:14px;margin-top:12px"><h2 style="font-size:18px">Order summary</h2>'+rows([['Creator price (locked)',b.type=='paid'?inr(T.p):'Barter'],['Platform fee (12%)',b.type=='paid'?'+'+inr(T.fee):'₹0']])+'<div style="display:flex;justify-content:space-between;padding:10px 0 4px;border-top:1px solid rgba(15,40,60,.08);font-size:17px;font-weight:800"><span>Total</span><span>'+inr(T.t)+'</span></div><div class="hint" style="display:flex;gap:6px;margin:8px 0 0">'+(b.type=='paid'?'Held in escrow, released to the creator only after admin approves the delivered work.':'Barter booking. No payment is needed.')+'</div></div><div style="display:flex;gap:10px;margin-top:16px;align-items:center">'+ghost('Back','back','back')+'<div style="flex:1">'+btn(b.type=='paid'?'Continue to payment':'Confirm booking','next')+'</div></div>'}
 if(s==5){var T2=tot(),short=S.wallet<T2.t;h='<div style="display:flex;flex-direction:column;gap:12px">'+opt('meth','wallet',b.method=='wallet','wallet','Collancer Wallet',inr(S.wallet)+' available · '+inr(T2.t))+opt('meth','cf',b.method=='cf','card','Cashfree','UPI · Cards · Netbanking, demo page · '+inr(T2.t))+'</div>'+(b.method=='wallet'&&short?'<div style="margin-top:12px;padding:12px 14px;border-radius:18px;background:#fff3dd;color:#9a5b00;font-size:13.5px;line-height:1.4">Wallet balance '+inr(S.wallet)+' is short of '+inr(T2.t)+'. Add money below, or use the demo checkout.<div class="tag glass" data-a="topup" style="margin-top:10px;width:max-content;color:#0b1217">'+ic('plus')+'Add '+inr(Math.max(500,Math.ceil((T2.t-S.wallet)/100)*100))+'</div></div>':'')+'<div style="display:flex;gap:10px;margin-top:16px;align-items:center">'+ghost('Back','back','back')+'<div style="flex:1">'+btn('Pay '+inr(T2.t),'pay','','',"lock",b.method=='wallet'&&short)+'</div></div><div class="note">'+(b.method=='wallet'?'Wallet debit runs as a secure transaction against your live balance.':'You will complete a test payment on a demo gateway page.')+'</div>'}
-if(s==6){var T3=tot();h='<div style="text-align:center;padding:10px 0 6px"><div class="t3 pk grn" style="width:72px;height:72px;margin:0 auto">'+pk('ok')+'</div><h2 style="margin-top:14px;font-size:22px">Booking sent</h2><p class="sub">'+c.name+' will review your request. You can track it in Dashboard.</p></div><div class="glass card" style="padding:14px;margin:12px 0 16px">'+rows([['Order ID','<span style="font-size:13px">'+esc(b.oid)+'</span>'],['Type',b.type=='paid'?'Paid':'Barter'],['Amount',inr(T3.t)]])+'</div>'+btn('View in Dashboard','done','','','ok')}
+if(s==6){var T3=tot();h='<div style="text-align:center;padding:10px 0 6px"><div class="t3 grn" style="width:72px;height:72px;margin:0 auto">'+ic('ok')+'</div><h2 style="margin-top:14px;font-size:22px">Booking sent</h2><p class="sub">'+c.name+' will review your request. You can track it in Dashboard.</p></div><div class="glass card" style="padding:14px;margin:12px 0 16px">'+rows([['Order ID','<span style="font-size:13px">'+esc(b.oid)+'</span>'],['Type',b.type=='paid'?'Paid':'Barter'],['Amount',inr(T3.t)]])+'</div>'+btn('View in Dashboard','done','','','ok')}
 return h}
-function sheet(){var b=S.bk;if(!b)return;var pc=b.step/6*100;$('#ov').innerHTML='<div class="dim"></div><div class="w"><div class="glass sh"><div class="grab"></div><div style="display:flex;align-items:center;gap:10px;padding:0 20px"><div style="flex:1"><div style="font-size:21px;font-weight:800;letter-spacing:-.3px">Book '+cr(S.cid).name+'</div><div class="sub" style="margin:2px 0 0;font-size:13px">Step '+b.step+' of 6 · '+LAB[b.step-1]+'</div></div>'+(b.step<6?'<div class="glass circ pkb" data-a="close" style="width:38px;height:38px;flex:none" role="button" aria-label="Close">'+pk('x')+'</div>':'')+'</div><div style="margin:12px 20px 0;height:8px;border-radius:4px;background:rgba(15,40,60,.08);box-shadow:inset 0 1.5px 2px rgba(15,50,80,.15)"><div style="height:8px;width:'+pc+'%;border-radius:4px;background:linear-gradient(180deg,#a5f3fc,#22d3ee 50%,#0891b2);transition:width .5s"></div></div><div class="sc" id="sc">'+body()+'</div></div></div>'}
+function sheet(){var b=S.bk;if(!b)return;var pc=b.step/6*100;$('#ov').innerHTML='<div class="dim"></div><div class="w"><div class="glass sh"><div class="grab"></div><div style="display:flex;align-items:center;gap:10px;padding:0 20px"><div style="flex:1"><div style="font-size:21px;font-weight:800;letter-spacing:-.3px">Book '+cr(S.cid).name+'</div><div class="sub" style="margin:2px 0 0;font-size:13px">Step '+b.step+' of 6 · '+LAB[b.step-1]+'</div></div>'+(b.step<6?'<div class="glass circ" data-a="close" style="width:38px;height:38px;flex:none" role="button" aria-label="Close">'+ic('x','class="ico"')+'</div>':'')+'</div><div style="margin:12px 20px 0;height:8px;border-radius:4px;background:rgba(15,40,60,.08);box-shadow:inset 0 1.5px 2px rgba(15,50,80,.15)"><div style="height:8px;width:'+pc+'%;border-radius:4px;background:linear-gradient(180deg,#a5f3fc,#22d3ee 50%,#0891b2);transition:width .5s"></div></div><div class="sc" id="sc">'+body()+'</div></div></div>'}
 function validate(){var f=S.bk.f,e={};if(!f.campaign.trim())e.campaign='Enter a campaign name.';if(!f.product.trim())e.product='Enter the product or service.';if(f.brief.trim().length<10)e.brief='Write at least 10 characters.';if(!f.deadline)e.deadline='Pick a deadline.';else if(f.deadline<today())e.deadline='Deadline cannot be in the past.';if(!/^\+?[0-9 ]{10,14}$/.test(f.contact.trim()))e.contact='Enter a valid phone number.';S.bk.err=e;return Object.keys(e).length==0}
 function finish(m){var b=S.bk,T=tot(),c=cr(S.cid);b.oid=(m||'BKG')+'_'+Math.random().toString(36).slice(2,10).toUpperCase();S.bookings.unshift({camp:b.f.campaign,creator:c.name,pkg:c.pk[b.pk][0],type:b.type,deadline:b.f.deadline,total:T.t,oid:b.oid});b.step=6;sheet()}
-function cfShow(){var c=S.cf,T=tot();$('#cf').className='ov on';$('#cf').innerHTML='<div class="dim" style="background:rgba(11,18,23,.55)"></div><div class="w"><div class="sh" style="background:#fff;border-radius:30px;overflow:hidden;box-shadow:0 30px 60px -20px rgba(0,0,0,.5)"><div style="background:#0b1217;color:#fff;padding:16px 20px"><div style="display:flex;justify-content:space-between;align-items:center"><b style="font-size:17px">Cashfree Payments</b><span style="background:#22d3ee;color:#0b1217;font-size:11px;font-weight:800;padding:4px 8px;border-radius:8px">TEST MODE</span></div><div style="font-size:12.5px;opacity:.7;margin-top:2px">Secure payment gateway</div><div style="margin-top:12px;padding:10px 12px;border-radius:12px;background:rgba(34,211,238,.12);font-size:12.5px">Sandbox only. No real money moves.</div></div><div class="sc" style="padding:24px 20px;text-align:center">'+(c=='pay'?'<div class="sub" style="margin:0">Paying for '+esc(S.bk.f.campaign)+'</div><div style="font-size:28px;font-weight:800;margin:8px 0 18px">'+inr(T.t)+'</div>'+btn('Pay '+inr(T.t),'cfpay')+'<div style="margin-top:10px"><span class="hint" data-a="cfx" style="cursor:pointer;text-decoration:underline">Cancel</span></div>':c=='proc'?'<div class="sub" style="margin:30px 0">Processing payment…</div>':'<div class="t3 pk grn" style="width:64px;height:64px;margin:0 auto">'+pk('ok')+'</div><h2 style="margin-top:12px">Payment successful</h2><p class="sub">'+inr(T.t)+' paid via Cashfree sandbox.</p><div style="margin:12px 0 16px;text-align:left" class="glass card">'+rows([['Order ID','<span style="font-size:12.5px">'+esc(S.cfid)+'</span>'],['Amount',inr(T.t)]])+'</div>'+btn('Done','cfdone','','','ok'))+'</div></div></div>'}
+function cfShow(){var c=S.cf,T=tot();$('#cf').className='ov on';$('#cf').innerHTML='<div class="dim" style="background:rgba(11,18,23,.55)"></div><div class="w"><div class="sh" style="background:#fff;border-radius:30px;overflow:hidden;box-shadow:0 30px 60px -20px rgba(0,0,0,.5)"><div style="background:#0b1217;color:#fff;padding:16px 20px"><div style="display:flex;justify-content:space-between;align-items:center"><b style="font-size:17px">Cashfree Payments</b><span style="background:#22d3ee;color:#0b1217;font-size:11px;font-weight:800;padding:4px 8px;border-radius:8px">TEST MODE</span></div><div style="font-size:12.5px;opacity:.7;margin-top:2px">Secure payment gateway</div><div style="margin-top:12px;padding:10px 12px;border-radius:12px;background:rgba(34,211,238,.12);font-size:12.5px">Sandbox only. No real money moves.</div></div><div class="sc" style="padding:24px 20px;text-align:center">'+(c=='pay'?'<div class="sub" style="margin:0">Paying for '+esc(S.bk.f.campaign)+'</div><div style="font-size:28px;font-weight:800;margin:8px 0 18px">'+inr(T.t)+'</div>'+btn('Pay '+inr(T.t),'cfpay')+'<div style="margin-top:10px"><span class="hint" data-a="cfx" style="cursor:pointer;text-decoration:underline">Cancel</span></div>':c=='proc'?'<div class="sub" style="margin:30px 0">Processing payment…</div>':'<div class="t3 grn" style="width:64px;height:64px;margin:0 auto">'+ic('ok')+'</div><h2 style="margin-top:12px">Payment successful</h2><p class="sub">'+inr(T.t)+' paid via Cashfree sandbox.</p><div style="margin:12px 0 16px;text-align:left" class="glass card">'+rows([['Order ID','<span style="font-size:12.5px">'+esc(S.cfid)+'</span>'],['Amount',inr(T.t)]])+'</div>'+btn('Done','cfdone','','','ok'))+'</div></div></div>'}
 var A={go:function(t){go(t.dataset.v)},home:function(){go('discover')},cat:function(t){S.cat=t.dataset.v;render()},open:function(t){S.cid=+t.dataset.v;S.ptab='Overview';go('profile')},ptab:function(t){S.ptab=t.dataset.v;render()},book:function(t){openBook(+t.dataset.v)},close:closeBook,
 type:function(t){S.bk.type=t.dataset.v;sheet()},pkg:function(t){S.bk.pk=+t.dataset.v;sheet()},meth:function(t){S.bk.method=t.dataset.v;sheet()},back:function(){S.bk.step=S.bk.step==6?5:(S.bk.step==4||S.bk.step==5)&&0?0:S.bk.step-1;sheet()},
 next:function(){var b=S.bk;if(b.step==3&&!validate()){sheet();var e=$('#ov [style*="e11d48"]');if(e)e.scrollIntoView({block:'center'});return}
@@ -2409,8 +2332,8 @@ document.addEventListener('input',function(e){var t=e.target;if(t.dataset&&t.dat
 S.mt='all';S.posts=[{id:1,brand:'mamaearth',ini:'me',ago:'3mo ago',status:'OPEN',title:'Finding creators',desc:'Looking for creators to promote our newly launched products.',budget:20000,cat:'Beauty'},{id:2,brand:'Collancer business',ini:'CB',ago:'4mo ago',status:'FULFILLED',title:'need creative',desc:'Need a creative reel concept and shoot for our festive collection launch.',budget:15000,cat:'Fashion'}];
 function mine(){return S.posts.filter(function(p){return p.mine})}
 function pcard(p){var ok=p.status=='OPEN';return '<div class="glass card" data-a="pdet" data-v="'+p.id+'" style="cursor:pointer;padding:16px"><div style="display:flex;align-items:center;gap:12px"><div class="glass" style="width:46px;height:46px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:800;color:#0e7490;flex:none;font-size:15px">'+esc(p.ini)+'</div><div style="flex:1;min-width:0"><div style="font-weight:800;font-size:16px">'+esc(p.brand)+'</div><div style="font-size:13px;color:#55616d">'+p.ago+'</div></div><span class="tag glass" style="height:28px;font-size:11.5px;cursor:default;flex:none;color:'+(ok?'#059669':'#0e7490')+'">'+p.status+'</span></div><div style="font-size:20px;font-weight:800;letter-spacing:-.3px;margin-top:14px">'+esc(p.title)+'</div><div class="sub" style="margin-top:4px;font-size:14.5px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden">'+esc(p.desc)+'</div><div style="display:flex;align-items:center;gap:10px;margin-top:14px"><b style="font-size:20px;color:#0e7490">'+inr(p.budget)+'</b><span class="tag glass" style="height:30px;font-size:12px;cursor:default">'+esc(p.cat.toUpperCase())+'</span><span style="flex:1"></span>'+ic('chev','class="chev"')+'</div></div>'}
-function market(){var l=S.mt=='all'?S.posts:mine();return hdrB()+'<div class="body" style="padding-top:14px"><div style="display:flex;align-items:flex-start;gap:12px"><div style="flex:1"><div style="display:flex;align-items:center;gap:10px"><span style="display:flex;width:28px;height:28px;color:#0e7490">'+ic('shop','style="width:28px;height:28px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round"')+'</span><span style="font-size:26px;font-weight:800;letter-spacing:-.5px">Marketplace</span></div><div class="sub" style="margin-top:4px;font-size:14px">Post requirements, creators send you offers.</div></div><button type="button" class="black" data-a="postnew" style="height:52px;padding:0 20px;border-radius:26px;flex:none">'+ic('plus','class="ico" style="width:20px;height:20px"')+'Post</button></div><div class="glass seg"><div class="'+(S.mt=='all'?'on':'')+'" data-a="mtab" data-v="all" style="padding:12px 0">Browse all</div><div class="'+(S.mt=='mine'?'on':'')+'" data-a="mtab" data-v="mine" style="padding:12px 0">My posts ('+mine().length+')</div></div>'+(l.length?l.map(pcard).join(''):'<div class="glass card empty" style="padding:32px 22px"><div class="t3 pk teal" style="width:60px;height:60px">'+pk('shop')+'</div><h2 style="margin-top:14px">No posts yet</h2><p class="sub">Post your first requirement and let creators come to you.</p><div style="margin-top:16px;width:100%">'+btn('Post requirement','postnew','','','plus')+'</div></div>')+'</div>'}
-function mpShell(t,s,b){var o=$('#mp');if(!o){o=document.createElement('div');o.id='mp';o.className='ov';document.body.appendChild(o)}o.className='ov on';o.innerHTML='<div class="dim"></div><div class="w"><div class="glass sh"><div class="grab"></div><div style="display:flex;align-items:center;padding:0 20px"><div style="flex:1"><div style="font-size:21px;font-weight:800">'+t+'</div>'+(s?'<div class="sub" style="margin:2px 0 0;font-size:13px">'+s+'</div>':'')+'</div><div class="glass circ pkb" data-a="mpx" style="width:38px;height:38px;flex:none" role="button" aria-label="Close">'+pk('x')+'</div></div><div class="sc">'+b+'</div></div></div>'}
+function market(){var l=S.mt=='all'?S.posts:mine();return hdrB()+'<div class="body" style="padding-top:14px"><div style="display:flex;align-items:flex-start;gap:12px"><div style="flex:1"><div style="display:flex;align-items:center;gap:10px"><span style="display:flex;width:28px;height:28px;color:#0e7490">'+ic('shop','style="width:28px;height:28px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round"')+'</span><span style="font-size:26px;font-weight:800;letter-spacing:-.5px">Marketplace</span></div><div class="sub" style="margin-top:4px;font-size:14px">Post requirements, creators send you offers.</div></div><button type="button" class="black" data-a="postnew" style="height:52px;padding:0 20px;border-radius:26px;flex:none">'+ic('plus','class="ico" style="width:20px;height:20px"')+'Post</button></div><div class="glass seg"><div class="'+(S.mt=='all'?'on':'')+'" data-a="mtab" data-v="all" style="padding:12px 0">Browse all</div><div class="'+(S.mt=='mine'?'on':'')+'" data-a="mtab" data-v="mine" style="padding:12px 0">My posts ('+mine().length+')</div></div>'+(l.length?l.map(pcard).join(''):'<div class="glass card empty" style="padding:32px 22px"><div class="t3 teal" style="width:60px;height:60px">'+ic('shop')+'</div><h2 style="margin-top:14px">No posts yet</h2><p class="sub">Post your first requirement and let creators come to you.</p><div style="margin-top:16px;width:100%">'+btn('Post requirement','postnew','','','plus')+'</div></div>')+'</div>'}
+function mpShell(t,s,b){var o=$('#mp');if(!o){o=document.createElement('div');o.id='mp';o.className='ov';document.body.appendChild(o)}o.className='ov on';o.innerHTML='<div class="dim"></div><div class="w"><div class="glass sh"><div class="grab"></div><div style="display:flex;align-items:center;padding:0 20px"><div style="flex:1"><div style="font-size:21px;font-weight:800">'+t+'</div>'+(s?'<div class="sub" style="margin:2px 0 0;font-size:13px">'+s+'</div>':'')+'</div><div class="glass circ" data-a="mpx" style="width:38px;height:38px;flex:none" role="button" aria-label="Close">'+ic('x','class="ico"')+'</div></div><div class="sc">'+b+'</div></div></div>'}
 function postForm(er){er=er||{};function e(k){return er[k]?'<div class="hint" style="color:#e11d48;font-weight:700">'+er[k]+'</div>':''}function bd(k){return er[k]?'style="box-shadow:0 0 0 1.5px #e11d48,inset 0 2px 3px rgba(15,50,80,.15)"':''}var v=S.pv||{};
 mpShell('Post requirement','Creators will see this and send you offers.','<label style="margin-top:0">Title *</label><div class="f ft" '+bd('t')+'><input id="pt" maxlength="60" placeholder="e.g. Need reels for our new launch" value="'+esc(v.t||'')+'"></div>'+e('t')+'<label>Description *</label><div class="f ta ft" '+bd('d')+'><textarea id="pd" maxlength="400" placeholder="What you need, deliverables, timeline...">'+esc(v.d||'')+'</textarea></div>'+e('d')+'<label>Budget (₹) *</label><div class="f ft" '+bd('b')+'><input id="pb" type="number" inputmode="numeric" placeholder="e.g. 15000" value="'+esc(v.b||'')+'"></div>'+e('b')+'<label>Category</label><div class="f ft"><select id="pc">'+['Fashion','Beauty','Fitness','Food','Travel','Tech'].map(function(c){return '<option'+(v.c==c?' selected':'')+'>'+c+'</option>'}).join('')+'</select>'+ic('chev','class="chev" style="transform:rotate(90deg)"')+'</div><div style="margin-top:18px">'+btn('Post requirement','postgo','','','ok')+'</div>')}
 Object.assign(A,{mtab:function(t){S.mt=t.dataset.v;render()},postnew:function(){S.pv=null;postForm()},mpx:function(){$('#mp').className='ov'},
@@ -2439,22 +2362,22 @@ render();window.addEventListener('load',function(){drop()});window.addEventListe
 <symbol id="ai-gear" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 00.3 1.8l.1.1a2 2 0 11-2.8 2.8l-.1-.1a1.7 1.7 0 00-1.8-.3 1.7 1.7 0 00-1 1.5V21a2 2 0 11-4 0v-.1a1.7 1.7 0 00-1.1-1.5 1.7 1.7 0 00-1.8.3l-.1.1a2 2 0 11-2.8-2.8l.1-.1a1.7 1.7 0 00.3-1.8 1.7 1.7 0 00-1.5-1H3a2 2 0 110-4h.1a1.7 1.7 0 001.5-1.1 1.7 1.7 0 00-.3-1.8l-.1-.1a2 2 0 112.8-2.8l.1.1a1.7 1.7 0 001.8.3H9a1.7 1.7 0 001-1.5V3a2 2 0 114 0v.1a1.7 1.7 0 001 1.5 1.7 1.7 0 001.8-.3l.1-.1a2 2 0 112.8 2.8l-.1.1a1.7 1.7 0 00-.3 1.8V9a1.7 1.7 0 001.5 1H21a2 2 0 110 4h-.1a1.7 1.7 0 00-1.5 1z"/></symbol>
 <symbol id="ai-xx" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></symbol>
 <symbol id="ai-chk" viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7"/></symbol>
-</defs></svg><div class="ai-p" id="aiP" role="region" aria-label="Collancer AI"><div class="ai-ah"><button class="ai-rb glass pkb" id="aiBack" aria-label="Back"><img src="icons/back.png" alt="" draggable="false"></button>
-<div class="t3 pk blk" style="width:44px;height:44px"><img src="icons/sparkles.png" alt="" draggable="false"></div>
+</defs></svg><div class="ai-p" id="aiP" role="region" aria-label="Collancer AI"><div class="ai-ah"><button class="ai-rb glass" id="aiBack" aria-label="Back"><svg class="ico"><use href="#ai-back"/></svg></button>
+<div class="t3 blk" style="width:44px;height:44px"><svg viewBox="0 0 24 24"><use href="#ai-spark"/></svg></div>
 <div class="ai-ttl"><h1>Collancer AI</h1><p>Your creator assistant for bookings, earnings and growth</p></div>
-<button class="ai-rb glass pkb" id="aiNew" aria-label="New chat"><img src="icons/plus.png" alt="" draggable="false"></button></div>
+<button class="ai-rb glass" id="aiNew" aria-label="New chat"><svg class="ico"><use href="#ai-plus"/></svg></button></div>
 <div class="ai-msgs" id="aiMsgs"></div>
 <div class="glass ai-inp"><input id="aiIn" placeholder="Ask about bookings, earnings, pricing..." autocomplete="off">
-<button class="ai-rb glass ai-wv pkb" id="aiVbtn" aria-label="Voice"><img src="icons/audio-lines.png" alt="" draggable="false"></button>
-<button class="black ai-sendc ai-rb pkb" id="aiGo" aria-label="Send"><img src="icons/arrow-up.png" alt="" draggable="false"></button></div></div><div class="ai-w" id="aiW"><div class="ai-voice"><div class="ai-orbw"><canvas id="aiCv" class="ai-orbc" width="260" height="260"></canvas></div>
+<button class="ai-rb glass ai-wv" id="aiVbtn" aria-label="Voice"><svg class="ico"><use href="#ai-wave"/></svg></button>
+<button class="black ai-sendc ai-rb" id="aiGo" aria-label="Send"><svg class="ico"><use href="#ai-up"/></svg></button></div></div><div class="ai-w" id="aiW"><div class="ai-voice"><div class="ai-orbw"><canvas id="aiCv" class="ai-orbc" width="260" height="260"></canvas></div>
 <div class="glass ai-lbox" id="aiLb">Listening...</div>
 <div class="ai-vrow"><button class="glass ai-gb" id="aiMt"><svg class="ico" style="width:20px;height:20px"><use href="#ai-spk"/></svg><span>Mute</span></button>
 <button class="black ai-gb" id="aiDn" style="color:#fff;font-weight:800"><svg class="ico" style="width:20px;height:20px"><use href="#ai-mic"/></svg>Done</button>
 <button class="glass ai-gb" id="aiCl"><svg class="ico" style="width:18px;height:18px"><use href="#ai-xx"/></svg>Close</button></div>
-<button class="glass ai-gb ai-gear pkb" id="aiGr" aria-label="Voice settings"><img src="icons/settings.png" alt="" draggable="false"></button><div class="ai-gl">Voice settings</div></div>
+<button class="glass ai-gb ai-gear" id="aiGr" aria-label="Voice settings"><svg class="ico" style="width:24px;height:24px"><use href="#ai-gear"/></svg></button><div class="ai-gl">Voice settings</div></div>
 
 <div class="ai-dim2" id="aiDm"></div>
-<div class="glass ai-vs"><div class="grab"></div><div class="ai-vh"><div><b>Choose voice</b><span id="aiVsub">Tap a voice to hear it</span></div><button class="glass ai-rb pkb" id="aiVx" aria-label="Close"><img src="icons/x.png" alt="" draggable="false"></button></div><div class="ai-vl" id="aiVl"></div></div></div><script>
+<div class="glass ai-vs"><div class="grab"></div><div class="ai-vh"><div><b>Choose voice</b><span id="aiVsub">Tap a voice to hear it</span></div><button class="glass ai-rb" id="aiVx" aria-label="Close"><svg class="ico" style="width:16px;height:16px"><use href="#ai-xx"/></svg></button></div><div class="ai-vl" id="aiVl"></div></div></div><script>
 (function(){
 var $=function(i){return document.getElementById(i)},st=$('aiW'),M=$('aiMsgs'),IN=$('aiIn'),spoken=null;
 var R={charge:"Pricing for reels varies widely based on your niche, audience size, engagement rate, and usage rights. On Collancer you set your own package prices — the platform adds a 12% fee on top for brands, and you receive 95% of your listed price. Check what similar creators in your category charge in the app to benchmark your rate.",
@@ -2465,9 +2388,8 @@ function bot(t){var a=document.createElement('div');a.className='glass ai-a';a.t
 function user(t){var u=document.createElement('div');u.className='ai-u';u.innerHTML=esc(t);M.appendChild(u);M.scrollTop=M.scrollHeight}
 function speak(t,b){try{var S=window.speechSynthesis;if(!S)return;var was=b.classList.contains('on');S.cancel();document.querySelectorAll('.ai-spk').forEach(function(x){x.classList.remove('on')});if(was)return;var u=new SpeechSynthesisUtterance(t);if(VO)u.voice=VO;u.onend=function(){b.classList.remove('on')};b.classList.add('on');S.speak(u)}catch(e){}}
 function ask(t,fv){t=t.trim();if(!t)return;user(t);var d=document.createElement('div');d.className='glass ai-a';d.innerHTML='<div class="ai-dots"><i></i><i></i><i></i></div>';M.appendChild(d);M.scrollTop=M.scrollHeight;
-function showAns(r){d.remove();bot(r);if(fv&&!muted)say(r)}
-function useLocal(){var l=t.toLowerCase(),r=/charge|price|pricing|rate|cost/.test(l)?R.charge:/collab/.test(l)?R.collab:R.other;showAns(r)}
-if(window.CleoAI&&window.CleoAI.ask){window.CleoAI.ask(t,{isCreator:false,context:{}}).then(function(res){if(res&&res.answer){showAns(res.answer)}else{useLocal()}}).catch(function(){useLocal()})}else{useLocal()}}
+function fallback(){var l=t.toLowerCase(),r=/charge|price|pricing|rate|cost/.test(l)?R.charge:/collab/.test(l)?R.collab:R.other;d.remove();bot(r);if(fv&&!muted)say(r)}
+try{if(window.CleoAI&&window.CleoAI.ask){window.CleoAI.ask(t,{isCreator:false,context:{}}).then(function(res){var ans=res&&res.answer?res.answer:'';d.remove();if(ans){bot(ans);if(fv&&!muted)say(ans)}else fallback()}).catch(fallback)}else fallback()}catch(e){fallback()}}
 function rdy(){$('aiGo').classList.toggle('ai-rdy',IN.value.trim().length>0)}
 IN.oninput=rdy;IN.onkeydown=function(e){if(e.key==='Enter'){send()}};
 function send(){var t=IN.value;if(!t.trim())return;IN.value='';rdy();ask(t)}
@@ -2476,15 +2398,13 @@ function init(){M.innerHTML='';user('What should I charge for a reel?');bot(R.ch
 $('aiNew').onclick=init;init();
 var tm,muted=false;
 var AC,AN,STREAM,REC,buf,demo=0,lvl=0,tgt=0,openT=0,raf=0,bub=[],DEMO='Mic unavailable here — showing a demo.';
-var aiSilTm=null,aiVoiceSubmitting=false,aiLastTranscript='';
-function startRec(){var SR=window.SpeechRecognition||window.webkitSpeechRecognition;if(!SR){$('aiLb').textContent='Speech recognition is not supported in this browser.';return}try{REC=new SR();REC.continuous=true;REC.interimResults=true;REC.lang='en-IN';REC.onresult=function(e){if(aiVoiceSubmitting)return;var t='';for(var i=0;i<e.results.length;i++){var part=e.results[i][0]&&e.results[i][0].transcript;if(part)t+=part}t=t.trim();if(!t)return;aiLastTranscript=t;$('aiLb').textContent=t;clearTimeout(aiSilTm);aiSilTm=setTimeout(function(){if(aiVoiceSubmitting)return;var finalText=(aiLastTranscript||$('aiLb').textContent||'').trim();if(finalText&&finalText!=='Listening...'&&finalText!==DEMO){aiVoiceSubmitting=true;finishAiVoice(finalText)}},1400)};REC.onerror=function(e){if(e&&e.error!=='no-speech'&&e.error!=='aborted')$('aiLb').textContent='I could not hear that clearly. Please try again.'};REC.onend=function(){};REC.start()}catch(e){REC=null;$('aiLb').textContent='Microphone could not start. Please try again.'}}
-function finishAiVoice(question){question=String(question||'').trim();clearTimeout(aiSilTm);if(!question||aiVoiceSubmitting)return;aiVoiceSubmitting=true;stopMic();$('aiLb').classList.add('ai-thinking');$('aiLb').textContent='Answering';var local=function(){var l=question.toLowerCase();return /charge|price|pricing|rate|cost/.test(l)?R.charge:/collab/.test(l)?R.collab:R.other};var finish=function(answer){var a=String(answer||'').trim()||local();$('aiLb').classList.remove('ai-thinking');$('aiLb').textContent=a;if(!muted)say(a)};if(window.CleoAI&&typeof window.CleoAI.ask==='function'){Promise.resolve().then(function(){return window.CleoAI.ask(question,{isCreator:false,context:{}})}).then(function(res){finish(res&&res.answer)}).catch(function(){finish(local())})}else{finish(local())}}
-
+var aiSilTm=null,aiWantRec=false;
+function startRec(){var SR=window.SpeechRecognition||window.webkitSpeechRecognition;if(!SR)return;try{REC=new SR();REC.continuous=true;REC.interimResults=true;REC.lang='en-IN';REC.onresult=function(e){var t='',fin=false;for(var i=0;i<e.results.length;i++){t+=e.results[i][0].transcript;if(e.results[i].isFinal)fin=true}if(t)$('aiLb').textContent=t;if(fin&&t.trim()){aiSilTm=setTimeout(function(){var tx=$('aiLb').textContent;if(tx&&tx!=='Listening...'&&tx!==DEMO){$('aiDn').onclick()} }},1600)}};REC.onend=function(){};REC.start()}catch(e){REC=null}}
 function startDemo(){demo=1;$('aiLb').textContent=DEMO;tm=setTimeout(function(){if(demo)$('aiLb').textContent='How do I get more brand deals?'},2800)}
 function startMic(){demo=0;try{navigator.mediaDevices.getUserMedia({audio:true}).then(function(s){if(!st.classList.contains('v')){s.getTracks().forEach(function(t){t.stop()});return}STREAM=s;AC=new (window.AudioContext||window.webkitAudioContext)();var src=AC.createMediaStreamSource(s);AN=AC.createAnalyser();AN.fftSize=512;buf=new Uint8Array(AN.fftSize);src.connect(AN);startRec()}).catch(startDemo)}catch(e){startDemo()}}
-function stopMic(){try{if(REC){REC.onend=null;REC.stop()}}catch(e){}REC=null;try{if(STREAM)STREAM.getTracks().forEach(function(t){t.stop()})}catch(e){}STREAM=null;try{if(AC)AC.close()}catch(e){}AC=null;AN=null;demo=0}
-function vopen(){clearTimeout(aiSilTm);aiVoiceSubmitting=false;aiLastTranscript='';$('aiLb').classList.remove('ai-thinking');st.classList.add('v');$('aiLb').textContent='Listening...';clearTimeout(tm);openT=performance.now();startMic();cancelAnimationFrame(raf);raf=requestAnimationFrame(loop)}
-function vclose(){clearTimeout(aiSilTm);stopMic();st.classList.remove('v');$('aiLb').classList.remove('ai-thinking');cancelAnimationFrame(raf);tgt=0}
+function stopMic(){aiWantRec=false;try{if(REC){REC.onend=null;REC.stop()}}catch(e){}REC=null;try{if(STREAM)STREAM.getTracks().forEach(function(t){t.stop()})}catch(e){}STREAM=null;try{if(AC)AC.close()}catch(e){}AC=null;AN=null;demo=0}
+function vopen(){st.classList.add('v');$('aiLb').textContent='Listening...';clearTimeout(tm);openT=performance.now();startMic();cancelAnimationFrame(raf);raf=requestAnimationFrame(loop)}
+function vclose(){clearTimeout(tm);stopMic();st.classList.remove('v');cancelAnimationFrame(raf);tgt=0}
 var FS=`precision highp float;
 uniform vec2 R;uniform float T;uniform float L;uniform float B;
 float hs(vec2 p){p=fract(p*vec2(123.34,456.21));p+=dot(p,p+45.32);return fract(p.x*p.y);}
@@ -2532,7 +2452,7 @@ function loop(now){raf=requestAnimationFrame(loop);var t=now/1000;
  lvl+=(tgt-lvl)*(tgt>lvl?.35:.07);render(t)}
 render(0);
 $('aiVbtn').onclick=vopen;$('aiCl').onclick=vclose;
-$('aiDn').onclick=function(){if(aiVoiceSubmitting)return;var t=(aiLastTranscript||$('aiLb').textContent||'').trim();if(!t||t==='Listening...'||t===DEMO){vclose();return}finishAiVoice(t)};
+$('aiDn').onclick=function(){var t=$('aiLb').textContent;vclose();if(t&&t!=='Listening...'&&t!==DEMO)ask(t,1)};
 $('aiMt').onclick=function(){muted=!muted;this.querySelector('span').textContent=muted?'Unmute':'Mute';this.querySelector('use').setAttribute('href',muted?'#ai-mute':'#ai-spk')};
 var VO=null,curV='',VL=[];
 var FEM=/female|woman|samantha|victoria|karen|moira|tessa|fiona|zira|aria|jenny|emma|susan|hazel|heera|veena|allison|ava|joanna|salli|kendra|kimberly|ivy|nicole|amy|libby|sonia|natasha/i,MAL=/\bmale\b|daniel|david|alex|fred|mark|guy|eric|roger|christopher|steffan|george|james|ravi|rishi|thomas|oliver|arthur|brian|matthew|justin|joey|ryan|liam/i;
@@ -2630,30 +2550,7 @@ background:radial-gradient(60% 38% at 12% 0%,#c9f3fb 0,rgba(201,243,251,0) 70%),
 #authGate{position:fixed;inset:0;z-index:100;overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:touch}
 #authGate .a-card{padding:14px 16px 18px}
 #authGate .a-msg{max-width:none;align-self:auto;animation:none;word-break:normal}
-:is(#_x,body) .t3.pk{background:none!important;box-shadow:none!important;border:0!important;overflow:visible}:is(#_x,body) .t3.pk::after{display:none!important}.t3.pk>img{width:100%;height:100%;object-fit:contain;display:block;position:relative;z-index:1;pointer-events:none}</style>
-<style id="mfit-gate">
-/* ===== mobile fit layer (brand login / register) ===== */
-@media (max-width:480px){
-  #authGate .a-wrap{padding:calc(48px + env(safe-area-inset-top,0px)) 14px calc(24px + env(safe-area-inset-bottom,0px))}
-  #authGate .brand{margin-bottom:16px}
-  #authGate .logo{width:60px;height:60px;margin-bottom:12px}
-  #authGate h1{font-size:27px}
-  #authGate .a-tag{margin-top:8px;font-size:11.5px;letter-spacing:1.2px}
-  #authGate .lede{margin-top:8px;font-size:14px;line-height:1.45}
-  #authGate .a-card{border-radius:28px;padding:12px 14px 16px}
-  #authGate .a-seg{padding:5px;border-radius:26px}
-  #authGate .a-seg button{height:42px;font-size:14px}
-  #authGate .a-pill{top:5px;bottom:5px;left:5px;width:calc(50% - 8px)}
-  #authGate .fld{margin-top:11px}
-  #authGate .a-f{height:48px;border-radius:18px}
-  #authGate .gbtn,#authGate .black{height:50px;border-radius:25px;font-size:15px}
-}
-@media (max-width:360px){
-  #authGate h1{font-size:24px}
-  #authGate .a-tag{letter-spacing:.8px;font-size:11px}
-  #authGate .logo{width:54px;height:54px}
-}
-:is(#_x,body) .t3.pk{background:none!important;box-shadow:none!important;border:0!important;overflow:visible}:is(#_x,body) .t3.pk::after{display:none!important}.t3.pk>img{width:100%;height:100%;object-fit:contain;display:block;position:relative;z-index:1;pointer-events:none}</style>
+</style>
 <div id="authGate" style="display:none">
 <svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
 <symbol id="au-login" viewBox="0 0 24 24"><path d="M14 4h4a2 2 0 012 2v12a2 2 0 01-2 2h-4M10 8l4 4-4 4M14 12H4"/></symbol>
@@ -2766,7 +2663,7 @@ var u=load();
 if(u){apply(u);render()}else showGate();
 })();
 <\/script>
-<style>#cl-sw{position:fixed;z-index:2147483000;left:12px;top:calc(10px + env(safe-area-inset-top,0px));display:none;align-items:center;gap:6px;height:36px;padding:0 14px 0 10px;border:1px solid rgba(255,255,255,.95);border-radius:18px;font:800 13px -apple-system,BlinkMacSystemFont,'Inter',system-ui,sans-serif;color:#0b1217;cursor:pointer;background:rgba(255,255,255,.72);backdrop-filter:blur(18px) saturate(180%);-webkit-backdrop-filter:blur(18px) saturate(180%);box-shadow:0 0 0 1px rgba(95,106,120,.45),0 8px 16px -8px rgba(15,50,80,.4)}#cl-sw svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round}:is(#_x,body) .t3.pk{background:none!important;box-shadow:none!important;border:0!important;overflow:visible}:is(#_x,body) .t3.pk::after{display:none!important}.t3.pk>img{width:100%;height:100%;object-fit:contain;display:block;position:relative;z-index:1;pointer-events:none}:is(#_x,body) .pkb{background:none!important;box-shadow:none!important;border:0!important;padding:0!important;overflow:visible;backdrop-filter:none!important;-webkit-backdrop-filter:none!important}:is(#_x,body) .pkb::before,:is(#_x,body) .pkb::after{display:none!important}.pkb>img{width:100%;height:100%;object-fit:contain;display:block;pointer-events:none}</style>
+<style>#cl-sw{position:fixed;z-index:2147483000;left:12px;top:calc(10px + env(safe-area-inset-top,0px));display:none;align-items:center;gap:6px;height:36px;padding:0 14px 0 10px;border:1px solid rgba(255,255,255,.95);border-radius:18px;font:800 13px -apple-system,BlinkMacSystemFont,'Inter',system-ui,sans-serif;color:#0b1217;cursor:pointer;background:rgba(255,255,255,.72);backdrop-filter:blur(18px) saturate(180%);-webkit-backdrop-filter:blur(18px) saturate(180%);box-shadow:0 0 0 1px rgba(95,106,120,.45),0 8px 16px -8px rgba(15,50,80,.4)}#cl-sw svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round}</style>
 <button type="button" id="cl-sw" aria-label="Switch role"><svg viewBox="0 0 24 24"><path d="M19 12H5M11 6l-6 6 6 6"/></svg>Switch role</button>
 <script>(function(){var b=document.getElementById('cl-sw'),K=function(){var g=document.getElementById('authGate');return g&&g.style.display==='block'};
 function vis(){try{return K()}catch(e){return false}}
@@ -2815,25 +2712,8 @@ function backToPicker(){
   document.body.style.overflow='';window.scrollTo(0,0);
 }
 window.addEventListener('message',function(e){if(e.data==='collancer:switch')backToPicker()});
-/* pre-select last used role */
+/* pre-select last used role (still shows the picker so users can switch) */
 try{var last=localStorage.getItem('collancer_role');if(last){var el=document.querySelector('.role[data-role="'+last+'"]');if(el)el.click()}}catch(e){}
-/* Auto-open app if user is already authenticated (avoids login flash on refresh) */
-(function autoOpen(){
-  var role=null;
-  try{role=localStorage.getItem('collancer_role')}catch(e){}
-  if(!role)return;
-  var isAuth=false;
-  try{
-    if(role==='creator') isAuth=(localStorage.getItem('collancer_creator_auth')==='1');
-    else if(role==='brand') isAuth=!!localStorage.getItem('collancer_user');
-  }catch(e){}
-  if(isAuth){
-    openApp(role);
-  }
-})();
-window.addEventListener('message',function(e){
-  if(e.data==='collancer:switch'||e.data==='collancer:logged_out')backToPicker();
-});
 })();
 </script>
 <script src="connect/shell-connect.js"></script>
