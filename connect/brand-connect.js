@@ -55,14 +55,70 @@ function toast(msg) {
   if (!t) {
     t = document.createElement('div');
     t.id = 'bcon-toast';
-    t.className = 'glass';
-    t.style.cssText = 'position:fixed;left:50%;bottom:26px;transform:translateX(-50%);z-index:9999;padding:12px 18px;border-radius:16px;font-size:13.5px;font-weight:600;opacity:0;transition:opacity .25s;pointer-events:none;max-width:86vw;text-align:center;';
+    /* 3D black button design, white text, above bottom bar — matches app design. */
+    t.style.cssText = 'position:fixed;left:50%;bottom:calc(110px + env(safe-area-inset-bottom,0px));transform:translateX(-50%) translateY(16px);z-index:99999;padding:14px 22px;border-radius:28px;color:#fff;font-weight:800;font-size:15px;text-align:center;background:linear-gradient(180deg,#3a3d44 0,#16181c 46%,#000 100%);border:1px solid #000;box-shadow:0 0 0 1px rgba(255,255,255,.6),0 0 0 2px rgba(0,0,0,.9),0 2px 0 2px #98a1ab,0 12px 18px -8px rgba(0,0,0,.55),inset 0 1.5px 0 rgba(255,255,255,.45),inset 0 -2px 4px rgba(255,255,255,.08);opacity:0;transition:opacity .25s,transform .25s;pointer-events:none;max-width:86vw;';
     document.body.appendChild(t);
   }
   t.textContent = msg;
   t.style.opacity = '1';
+  t.style.transform = 'translateX(-50%) translateY(0)';
   clearTimeout(t._tm);
-  t._tm = setTimeout(function () { t.style.opacity = '0'; }, 2600);
+  t._tm = setTimeout(function () {
+    t.style.opacity = '0';
+    t.style.transform = 'translateX(-50%) translateY(16px)';
+  }, 3000);
+}
+/* ---------------- pull to refresh ---------------- */
+function initPullToRefresh() {
+  var startY = 0, pulling = false, ptrEl = null;
+  function ensurePtr() {
+    if (ptrEl) return ptrEl;
+    ptrEl = document.createElement('div');
+    ptrEl.id = 'bcon-ptr';
+    ptrEl.style.cssText = 'position:fixed;top:0;left:0;right:0;display:flex;align-items:center;justify-content:center;height:0;overflow:hidden;z-index:99998;transition:height .2s;pointer-events:none;';
+    ptrEl.innerHTML = '<div style="width:38px;height:38px;border-radius:50%;background:linear-gradient(180deg,#3a3d44 0,#16181c 46%,#000 100%);border:1px solid #000;box-shadow:0 0 0 1px rgba(255,255,255,.6),0 0 0 2px rgba(0,0,0,.9),inset 0 1.5px 0 rgba(255,255,255,.45);display:flex;align-items:center;justify-content:center;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.5"><path d="M21 12a9 9 0 1 1-2.6-6.4"/><path d="M21 3v6h-6"/></svg></div>';
+    document.body.appendChild(ptrEl);
+    return ptrEl;
+  }
+  document.addEventListener('touchstart', function (e) {
+    if (e.touches.length !== 1) return;
+    var el = document.scrollingElement || document.documentElement;
+    if (el.scrollTop > 0) return;
+    startY = e.touches[0].clientY;
+    pulling = true;
+  }, { passive: true });
+  document.addEventListener('touchmove', function (e) {
+    if (!pulling) return;
+    var dy = e.touches[0].clientY - startY;
+    var el = document.scrollingElement || document.documentElement;
+    if (dy > 0 && el.scrollTop <= 0) {
+      var p = ensurePtr();
+      p.style.height = Math.min(70, dy * 0.5) + 'px';
+      p.dataset.armed = dy > 110 ? '1' : '';
+    } else if (dy <= 0) {
+      pulling = false;
+      if (ptrEl) ptrEl.style.height = '0px';
+    }
+  }, { passive: true });
+  document.addEventListener('touchend', function () {
+    if (!pulling) return;
+    pulling = false;
+    var el = ptrEl;
+    if (el && el.dataset.armed === '1') {
+      el.dataset.armed = '';
+      el.style.height = '56px';
+      toast('Refreshing…');
+      try {
+        if (typeof loadBusiness === 'function') loadBusiness();
+        if (typeof loadCreators === 'function') loadCreators();
+        if (typeof loadBookings === 'function') loadBookings();
+        if (typeof loadMarketplace === 'function') loadMarketplace();
+      } catch (e) {}
+      setTimeout(function () { el.style.height = '0px'; }, 900);
+    } else if (el) {
+      el.style.height = '0px';
+    }
+  }, { passive: true });
 }
 function friendlyAuthError(err) {
   var c = (err && err.code) || '';
@@ -91,6 +147,7 @@ function init() {
   origFinish = window.finish; origPpay = A.ppay; origLo = A.lo;
   wireAuth();
   wireActions();
+  initPullToRefresh();
   FB.onAuth(function (u) {
     if (!u) { teardown(); return; } // auth gate stays visible
     uid = u.uid;
@@ -539,7 +596,7 @@ function realCashfreePay(amount, label, cb) {
       var cf = Cashfree({ mode: r.env === 'production' ? 'production' : 'sandbox' });
       return cf.checkout({ paymentSessionId: r.payment_session_id, redirectTarget: '_modal' }).then(function () {
         return FB.api('cashfree-verify', { order_id: r.order_id }).then(function (v) {
-          if (v && v.ok) cb(r.order_id, r.env || 'test');
+          if (v && v.order_status === 'PAID') cb(r.order_id, r.env || 'test');
           else { toast('Payment not confirmed. Please try again.'); cb(null); }
         });
       });
