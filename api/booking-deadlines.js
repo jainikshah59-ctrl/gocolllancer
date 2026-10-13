@@ -36,21 +36,18 @@ export default async function handler(req, res) {
       const b = doc.data();
       if (b.autoCancelled) continue;
       const batch = db.batch();
-      // Refund brand wallet
+      // Refund brand wallet (atomic increment to prevent race conditions)
       if (b.bizId && b.paidAmount > 0 && !b.barter) {
         const bizRef = db.collection('businesses').doc(b.bizId);
-        const bizSnap = await bizRef.get();
-        if (bizSnap.exists) {
-          const bal = Number(bizSnap.data().walletBalance || 0);
-          batch.update(bizRef, { walletBalance: bal + b.paidAmount });
-          // Ledger entry
-          const ledgerRef = db.collection('wallet_ledger').doc();
-          batch.set(ledgerRef, {
-            bizId: b.bizId, bookingId: doc.id, type: 'refund_auto_cancel',
-            amount: b.paidAmount, createdAt: now,
-            note: 'Auto-refund: creator did not accept within 72h',
-          });
-        }
+        const { FieldValue } = require('firebase-admin/firestore');
+        batch.update(bizRef, { walletBalance: FieldValue.increment(b.paidAmount) });
+        // Ledger entry
+        const ledgerRef = db.collection('wallet_ledger').doc();
+        batch.set(ledgerRef, {
+          bizId: b.bizId, bookingId: doc.id, type: 'refund_auto_cancel',
+          amount: b.paidAmount, createdAt: now,
+          note: 'Auto-refund: creator did not accept within 72h',
+        });
       }
       batch.update(doc.ref, {
         status: 'Cancelled', autoCancelled: true,
@@ -84,7 +81,7 @@ export default async function handler(req, res) {
       const payoutRef = db.collection('payoutRequests').doc();
       batch.set(payoutRef, {
         bookingId: doc.id, creatorId: b.creatorId,
-        amount: Math.round((b.creatorPrice || 0) * 0.93), // 7% creator fee
+        amount: Math.round((b.creatorPrice || 0) * 0.95), // 95% creator share (canonical)
         status: 'pending', createdAt: now,
         note: 'Auto-approved booking payout',
       });
