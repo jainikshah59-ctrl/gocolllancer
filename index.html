@@ -2463,7 +2463,9 @@ function bot(t){var a=document.createElement('div');a.className='glass ai-a';a.t
 function user(t){var u=document.createElement('div');u.className='ai-u';u.innerHTML=esc(t);M.appendChild(u);M.scrollTop=M.scrollHeight}
 function speak(t,b){try{var S=window.speechSynthesis;if(!S)return;var was=b.classList.contains('on');S.cancel();document.querySelectorAll('.ai-spk').forEach(function(x){x.classList.remove('on')});if(was)return;var u=new SpeechSynthesisUtterance(t);if(VO)u.voice=VO;u.onend=function(){b.classList.remove('on')};b.classList.add('on');S.speak(u)}catch(e){}}
 function ask(t,fv){t=t.trim();if(!t)return;user(t);var d=document.createElement('div');d.className='glass ai-a';d.innerHTML='<div class="ai-dots"><i></i><i></i><i></i></div>';M.appendChild(d);M.scrollTop=M.scrollHeight;
-var l=t.toLowerCase(),r=/charge|price|pricing|rate|cost/.test(l)?R.charge:/collab/.test(l)?R.collab:R.other;setTimeout(function(){d.remove();bot(r);if(fv&&!muted)say(r)},900)}
+function showAns(r){d.remove();bot(r);if(fv&&!muted)say(r)}
+function useLocal(){var l=t.toLowerCase(),r=/charge|price|pricing|rate|cost/.test(l)?R.charge:/collab/.test(l)?R.collab:R.other;showAns(r)}
+if(window.CleoAI&&window.CleoAI.ask){window.CleoAI.ask(t,{isCreator:false,context:{}}).then(function(res){if(res&&res.answer){showAns(res.answer)}else{useLocal()}}).catch(function(){useLocal()})}else{useLocal()}}
 function rdy(){$('aiGo').classList.toggle('ai-rdy',IN.value.trim().length>0)}
 IN.oninput=rdy;IN.onkeydown=function(e){if(e.key==='Enter'){send()}};
 function send(){var t=IN.value;if(!t.trim())return;IN.value='';rdy();ask(t)}
