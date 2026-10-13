@@ -2474,13 +2474,15 @@ function init(){M.innerHTML='';user('What should I charge for a reel?');bot(R.ch
 $('aiNew').onclick=init;init();
 var tm,muted=false;
 var AC,AN,STREAM,REC,buf,demo=0,lvl=0,tgt=0,openT=0,raf=0,bub=[],DEMO='Mic unavailable here — showing a demo.';
-var aiSilTm=null;
-function startRec(){var SR=window.SpeechRecognition||window.webkitSpeechRecognition;if(!SR)return;try{REC=new SR();REC.continuous=true;REC.interimResults=true;REC.lang='en-IN';REC.onresult=function(e){var t='',fin=false;for(var i=0;i<e.results.length;i++){t+=e.results[i][0].transcript;if(e.results[i].isFinal)fin=true}if(t)$('aiLb').textContent=t;if(fin&&t.trim()){clearTimeout(aiSilTm);aiSilTm=setTimeout(function(){var tx=$('aiLb').textContent;if(tx&&tx!=='Listening...'&&tx!==DEMO){$('aiDn').onclick()} }},1600)}};REC.onend=function(){};REC.start()}catch(e){REC=null}}
+var aiSilTm=null,aiVoiceSubmitting=false,aiLastTranscript='';
+function startRec(){var SR=window.SpeechRecognition||window.webkitSpeechRecognition;if(!SR){$('aiLb').textContent='Speech recognition is not supported in this browser.';return}try{REC=new SR();REC.continuous=true;REC.interimResults=true;REC.lang='en-IN';REC.onresult=function(e){if(aiVoiceSubmitting)return;var t='';for(var i=0;i<e.results.length;i++){var part=e.results[i][0]&&e.results[i][0].transcript;if(part)t+=part}t=t.trim();if(!t)return;aiLastTranscript=t;$('aiLb').textContent=t;clearTimeout(aiSilTm);aiSilTm=setTimeout(function(){if(aiVoiceSubmitting)return;var finalText=(aiLastTranscript||$('aiLb').textContent||'').trim();if(finalText&&finalText!=='Listening...'&&finalText!==DEMO){aiVoiceSubmitting=true;finishAiVoice(finalText)}},1400)};REC.onerror=function(e){if(e&&e.error!=='no-speech'&&e.error!=='aborted')$('aiLb').textContent='I could not hear that clearly. Please try again.'};REC.onend=function(){};REC.start()}catch(e){REC=null;$('aiLb').textContent='Microphone could not start. Please try again.'}}
+function finishAiVoice(question){clearTimeout(aiSilTm);aiVoiceSubmitting=true;vclose();if(question&&question.trim())ask(question.trim(),1)}
+
 function startDemo(){demo=1;$('aiLb').textContent=DEMO;tm=setTimeout(function(){if(demo)$('aiLb').textContent='How do I get more brand deals?'},2800)}
 function startMic(){demo=0;try{navigator.mediaDevices.getUserMedia({audio:true}).then(function(s){if(!st.classList.contains('v')){s.getTracks().forEach(function(t){t.stop()});return}STREAM=s;AC=new (window.AudioContext||window.webkitAudioContext)();var src=AC.createMediaStreamSource(s);AN=AC.createAnalyser();AN.fftSize=512;buf=new Uint8Array(AN.fftSize);src.connect(AN);startRec()}).catch(startDemo)}catch(e){startDemo()}}
 function stopMic(){try{if(REC){REC.onend=null;REC.stop()}}catch(e){}REC=null;try{if(STREAM)STREAM.getTracks().forEach(function(t){t.stop()})}catch(e){}STREAM=null;try{if(AC)AC.close()}catch(e){}AC=null;AN=null;demo=0}
-function vopen(){st.classList.add('v');$('aiLb').textContent='Listening...';clearTimeout(tm);openT=performance.now();startMic();cancelAnimationFrame(raf);raf=requestAnimationFrame(loop)}
-function vclose(){clearTimeout(tm);stopMic();st.classList.remove('v');cancelAnimationFrame(raf);tgt=0}
+function vopen(){clearTimeout(aiSilTm);aiVoiceSubmitting=false;aiLastTranscript='';st.classList.add('v');$('aiLb').textContent='Listening...';clearTimeout(tm);openT=performance.now();startMic();cancelAnimationFrame(raf);raf=requestAnimationFrame(loop)}
+function vclose(){clearTimeout(aiSilTm);stopMic();st.classList.remove('v');cancelAnimationFrame(raf);tgt=0}
 var FS=`precision highp float;
 uniform vec2 R;uniform float T;uniform float L;uniform float B;
 float hs(vec2 p){p=fract(p*vec2(123.34,456.21));p+=dot(p,p+45.32);return fract(p.x*p.y);}
@@ -2528,7 +2530,7 @@ function loop(now){raf=requestAnimationFrame(loop);var t=now/1000;
  lvl+=(tgt-lvl)*(tgt>lvl?.35:.07);render(t)}
 render(0);
 $('aiVbtn').onclick=vopen;$('aiCl').onclick=vclose;
-$('aiDn').onclick=function(){var t=$('aiLb').textContent;vclose();if(t&&t!=='Listening...'&&t!==DEMO)ask(t,1)};
+$('aiDn').onclick=function(){if(aiVoiceSubmitting)return;var t=(aiLastTranscript||$('aiLb').textContent||'').trim();if(!t||t==='Listening...'||t===DEMO){vclose();return}finishAiVoice(t)};
 $('aiMt').onclick=function(){muted=!muted;this.querySelector('span').textContent=muted?'Unmute':'Mute';this.querySelector('use').setAttribute('href',muted?'#ai-mute':'#ai-spk')};
 var VO=null,curV='',VL=[];
 var FEM=/female|woman|samantha|victoria|karen|moira|tessa|fiona|zira|aria|jenny|emma|susan|hazel|heera|veena|allison|ava|joanna|salli|kendra|kimberly|ivy|nicole|amy|libby|sonia|natasha/i,MAL=/\bmale\b|daniel|david|alex|fred|mark|guy|eric|roger|christopher|steffan|george|james|ravi|rishi|thomas|oliver|arthur|brian|matthew|justin|joey|ryan|liam/i;
