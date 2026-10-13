@@ -9,7 +9,7 @@
 import { answerQuery } from './engine.js';
 import { askCreatorAI } from './creatorAi.js';
 import { findKnowledge } from './cleoKnowledgeBase.js';
-import { poolAnswer, isPoolableQuery, mentionsCollancer } from './llmPool.js';
+import { poolAnswer, isPoolableQuery } from './llmPool.js';
 import { checkScope, scopeRefusal, socialReply } from './scopeGuard.js';
 import { QA_ENTRIES, KB_TOPICS } from './knowledge.js';
 
@@ -24,13 +24,24 @@ function guard(q, isCreator, convo) {
   return { blocked: false };
 }
 
-/* Creator side: strictly local/database-backed. No external AI provider. */
+/* Creator side: LLM pool FIRST, local knowledge base as silent last-resort fallback. */
 async function creatorAnswer(q, context = {}) {
   q = String(q || '').trim();
   if (!q) return { answer: '', creators: [], actions: [], confidence: 0 };
   const g = guard(q, true, context.convo);
   if (g.blocked) return { answer: g.answer, creators: [], actions: [], confidence: g.confidence || 1 };
 
+  /* NEW: Multi-lane LLM pool takes first priority for ALL creator questions. */
+  if (isPoolableQuery(q, context.convo)) {
+    try {
+      const pooled = await poolAnswer(q, true);
+      if (pooled && pooled.text) {
+        return { answer: pooled.text, creators: [], actions: [], confidence: 0.78 };
+      }
+    } catch { /* pool exhausted — fall through to local database */ }
+  }
+
+  /* Silent fallback: local creator knowledge base (only when all lanes fail). */
   const account = {
     creator: context.user || {},
     bookings: context.bookings || [],
@@ -50,8 +61,9 @@ async function creatorAnswer(q, context = {}) {
   return { answer: CREATOR_FALLBACK, creators: [], actions: [], confidence: 0.3 };
 }
 
-/* Brand side: Collancer-name questions -> deterministic engine; ordinary
- * questions -> keyless LLM pool; discovery/data queries stay on real records. */
+/* Brand side: LLM pool FIRST for all questions; deterministic engine only as
+ * fallback when all free lanes are exhausted. Discovery/data queries stay on
+ * real records via isPoolableQuery routing. */
 async function brandAnswer(q, context = {}) {
   q = String(q || '').trim();
   if (!q) return { answer: '', creators: [], actions: [], confidence: 0 };
@@ -68,7 +80,6 @@ async function brandAnswer(q, context = {}) {
     kbTopics: KB_TOPICS,
     convo: context.convo || null,
   };
-  if (mentionsCollancer(q)) return await answerQuery(q, ctx);
   if (isPoolableQuery(q, ctx.convo)) {
     let pooled = null;
     try { pooled = await poolAnswer(q, false); } catch { /* provider chain exhausted */ }

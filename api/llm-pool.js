@@ -7,8 +7,10 @@
  *
  * Input:  { system, user }
  * Output: { provider: 'kilo' | 'none', text }
- * Always HTTP 200, never throws. Empty text = lane failed; the client falls
- * back to Pollinations-direct, then to the deterministic Collancer brain.
+ * Always HTTP 200, never throws. Empty text = lane failed.
+ * NOTE: The client-side pool (connect/ai/llmPool.js) now uses a 3-lane
+ * free pool (Groq → Cloudflare → Gemini) directly. This server endpoint
+ * is retained as an optional fallback but is not part of the primary flow.
  */
 
 const KILO_URL = 'https://api.kilo.ai/api/gateway/chat/completions';
