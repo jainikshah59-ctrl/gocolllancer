@@ -82,6 +82,20 @@ export default async function handler(req, res) {
     });
   }
 
+  // Rate limiting: 30 requests per minute per IP (prevent quota theft)
+  const ip = req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.socket?.remoteAddress || 'unknown';
+  const now = Date.now();
+  const windowMs = 60000;
+  const maxReq = 30;
+  if (!global._llmRate) global._llmRate = {};
+  const rec = global._llmRate[ip] || { count: 0, reset: now + windowMs };
+  if (now > rec.reset) { rec.count = 0; rec.reset = now + windowMs; }
+  rec.count++;
+  global._llmRate[ip] = rec;
+  if (rec.count > maxReq) {
+    return res.status(429).json({ provider: 'none', text: '', error: 'rate_limited' });
+  }
+
   try {
     if (req.method !== 'POST') return done('none', '');
     let body = req.body;
