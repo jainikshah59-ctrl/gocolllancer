@@ -16,7 +16,7 @@
  */
 
 const GROQ_URL = 'https://api.groq.com/openai/v1/chat/completions';
-const GROQ_MODEL = 'llama-3.1-8b-instant';
+const GROQ_MODEL = 'openai/gpt-oss-20b'; // free, no card (llama-3.1-8b-instant was retired by Groq)
 const CF_MODEL = '@cf/meta/llama-3.1-8b-instruct';
 const GEMINI_URL = 'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions';
 const GEMINI_MODEL = 'gemini-1.5-flash';
