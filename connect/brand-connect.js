@@ -268,9 +268,12 @@ function loadBusiness() {
 }
 function bizIsPro() { return !!(bizDoc && bizDoc.isPro && bizDoc.proActive); }
 function pricingFor(creatorPrice) {
-  var fee = Math.round(creatorPrice * 0.12);
+  // Canonical rule: 5% Pro discount off the CREATOR PRICE first,
+  // then 12% platform fee on the DISCOUNTED price.
   var discount = bizIsPro() ? Math.round(creatorPrice * 0.05) : 0;
-  return { creatorPrice: creatorPrice, fee: fee, discount: discount, total: creatorPrice + fee - discount };
+  var discounted = creatorPrice - discount;
+  var fee = Math.round(discounted * 0.12);
+  return { creatorPrice: creatorPrice, discountedPrice: discounted, fee: fee, discount: discount, total: discounted + fee };
 }
 
 /* ---------------- discover: real creators ---------------- */
