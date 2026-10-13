@@ -209,11 +209,28 @@ export default async function handler(req, res) {
     res.setHeader('Allow', 'POST');
     return res.status(405).json({ ok: false, reason: 'method-not-allowed' });
   }
+  // Shared rate limit: 20 TTS requests per minute per IP (audio is expensive)
+  const { rateLimit } = await import('../lib/rateLimit.js');
+  if (!rateLimit(req, res, { max: 20, windowMs: 60000, key: 'edge-tts' })) return;
+
   let body = req.body;
   if (typeof body === 'string') {
     try { body = JSON.parse(body); } catch { body = {}; }
   }
   body = body && typeof body === 'object' ? body : {};
+
+  // Require Firebase auth — this is a proxied paid-utility endpoint and must
+  // not be an open TTS service for the whole internet.
+  try {
+    const { getAdmin } = await import('../lib/firebaseAdmin.js');
+    const admin = getAdmin();
+    const idToken = body.idToken || (req.headers.authorization || '').replace(/^Bearer\s+/i, '');
+    if (!idToken) return res.status(401).json({ ok: false, reason: 'auth-required' });
+    await admin.auth().verifyIdToken(idToken);
+  } catch (e) {
+    return res.status(401).json({ ok: false, reason: 'invalid-token' });
+  }
+
   const text = String(body.text || '').slice(0, MAX_CHARS).trim();
   const voice = ALLOW_VOICES.has(body.voice) ? body.voice : 'en-US-ChristopherNeural';
   const rate = Math.min(2, Math.max(0.5, Number(body.rate) || 1));
