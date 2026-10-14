@@ -267,6 +267,7 @@ function loadBusiness() {
   }, function () { bizDoc = null; }));
 }
 function bizIsPro() { return !!(bizDoc && bizDoc.isPro && bizDoc.proActive); }
+try { window.collancerIsPro = bizIsPro; } catch (e) {}
 function pricingFor(creatorPrice) {
   // Canonical rule: 5% Pro discount off the CREATOR PRICE first,
   // then 12% platform fee on the DISCOUNTED price.
@@ -598,8 +599,9 @@ function realCashfreePay(amount, label, cb) {
     loadCashfreeSdk().then(function (Cashfree) {
       var cf = Cashfree({ mode: r.env === 'production' ? 'production' : 'sandbox' });
       return cf.checkout({ paymentSessionId: r.payment_session_id, redirectTarget: '_modal' }).then(function () {
-        return FB.api('cashfree-verify', { order_id: r.order_id }).then(function (v) {
-          if (v && v.order_status === 'PAID') cb(r.order_id, r.env || 'test');
+        // expected_amount: verify the PAID order's amount matches what we charged
+        return FB.api('cashfree-verify', { order_id: r.order_id, expected_amount: amount }).then(function (v) {
+          if (v && v.order_status === 'PAID' && v.amount_matches !== false) cb(r.order_id, r.env || 'test');
           else { toast('Payment not confirmed. Please try again.'); cb(null); }
         });
       });
@@ -613,20 +615,65 @@ function payWithCashfreeBooking(T) {
     if (!orderId) return; // demo fallback already handled by A.ppay path
     var booking = buildBooking('cashfree', orderId, true, env || 'test');
     if (!booking) return;
-    sha256hex(JSON.stringify(fingerprintParts())).then(function (fp) {
-      var id = 'collab_' + fp;
-      DB.collection('bookings').doc(id).set(Object.assign({}, booking, { collaborationFingerprint: fp }), { merge: true })
-        .then(function () {
-          notifyCreator(booking.creatorId, id, 'New collaboration request',
-            (booking.bizName || 'A brand') + ' booked ' + (booking.campaignName || 'a campaign') + '.');
-          uiBookingDone(id, 'CF');
-          try { S.bk.oid = id; if (S.bookings[0]) S.bookings[0].oid = id; sheet(); } catch (e) {}
-          loadBookings();
-        })
-        .catch(function () { toast('Payment succeeded but booking save failed. Contact support.'); });
-    });
+    toast('Confirming payment\u2026');
+    // B-C1: booking + all money fields are written SERVER-SIDE via
+    // /api/booking-create (payment verified, amount recomputed, order
+    // registry prevents reuse). Never write the booking doc from the client.
+    FB.api('booking-create', { orderId: orderId, booking: booking })
+      .then(function (r) {
+        var id = (r && r.bookingId) || null;
+        if (!id) { toast('Payment succeeded but booking save failed. Contact support.'); return; }
+        notifyCreator(booking.creatorId, id, 'New collaboration request',
+          (booking.bizName || 'A brand') + ' booked ' + (booking.campaignName || 'a campaign') + '.');
+        uiBookingDone(id, 'CF');
+        try { S.bk.oid = id; if (S.bookings && S.bookings[0]) S.bookings[0].oid = id; sheet(); } catch (e) {}
+        loadBookings();
+      })
+      .catch(function (e) {
+        var m = (e && e.message) || '';
+        if (/already[ _-]?used|reused|order_reused/i.test(m)) toast('This payment was already used for a booking.');
+        else if (/amount_mismatch|amount/i.test(m)) toast('Payment amount did not match the booking total. Contact support.');
+        else toast('Payment succeeded but booking save failed. Contact support.');
+      });
   });
 }
+
+/* Brand review of delivered work. Exposed as a global for the booking sheet:
+ *   window.collancerReviewBooking(bookingId, 'approve')
+ *   window.collancerReviewBooking(bookingId, 'revision', note)
+ * Verifies the booking belongs to this brand (bizId === uid) before writing. */
+function reviewBooking(bookingId, decision, note) {
+  var ref = DB.collection('bookings').doc(String(bookingId || ''));
+  toast('Updating booking\u2026');
+  return ref.get().then(function (snap) {
+    if (!snap.exists) throw new Error('not_found');
+    var d = snap.data() || {};
+    if (String(d.bizId) !== String(uid)) throw new Error('not_your_booking');
+    if (d.status !== 'PendingCompletion') throw new Error('wrong_status');
+    if (decision === 'approve') {
+      return ref.update({ status: 'Completed', completedAt: FB.serverStamp(), updatedAt: FB.serverStamp() });
+    }
+    if (decision === 'revision') {
+      return ref.update({
+        status: 'Active',
+        revisionNote: String(note || '').slice(0, 1000),
+        revisionCount: firebase.firestore.FieldValue.increment(1),
+        updatedAt: FB.serverStamp(),
+      });
+    }
+    throw new Error('bad_decision');
+  }).then(function () {
+    toast(decision === 'approve' ? 'Booking completed. Payout queued for the creator.' : 'Revision requested. The creator has been notified.');
+    try { loadBookings(); } catch (e) {}
+  }).catch(function (e) {
+    var m = (e && e.message) || '';
+    if (m === 'not_your_booking') toast('This booking does not belong to your account.');
+    else if (m === 'wrong_status') toast('This booking is not awaiting review.');
+    else if (m === 'bad_decision') toast('Invalid review decision.');
+    else toast('Could not update booking. Please try again.');
+  });
+}
+try { window.collancerReviewBooking = reviewBooking; } catch (e) {}
 
 /* ---------------- marketplace ---------------- */
 function loadMarketplace() {
