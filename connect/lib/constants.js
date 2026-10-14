@@ -79,11 +79,15 @@ export const INDUSTRIES = [
   'Real Estate', 'Automobile', 'Home & Living', 'Other',
 ];
 
-/** Pricing math for a paid booking. Returns { creatorPrice, fee, discount, total }. */
+/** Pricing math for a paid booking. Returns { creatorPrice, fee, discount, total }.
+ * Canonical rule (matches brand-connect.js pricingFor and api/book-with-wallet.js):
+ * 5% Pro discount off the CREATOR PRICE first, then 12% platform fee on the
+ * discounted price. (Previously fee was computed on the full price.) */
 export function priceBreakup(creatorPrice, isPro) {
-  const fee = Math.round((creatorPrice * PLATFORM_FEE_PCT) / 100);
   const discount = isPro ? Math.round((creatorPrice * PRO_DISCOUNT_PCT) / 100) : 0;
-  const total = creatorPrice + fee - discount;
+  const discounted = creatorPrice - discount;
+  const fee = Math.round((discounted * PLATFORM_FEE_PCT) / 100);
+  const total = discounted + fee;
   return { creatorPrice, fee, discount, total };
 }
 
