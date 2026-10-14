@@ -423,6 +423,40 @@ function mapBooking(id, d) {
     _bizId: d.bizId, _firestoreStatus: d.status,
   };
 }
+/* Creator marks work delivered: Active -> PendingCompletion, starting the
+ * 72h brand-review window. Verifies the booking belongs to this creator. */
+function deliverBooking(bookingId) {
+  var ref = DB.collection('bookings').doc(String(bookingId || ''));
+  var bizId = null;
+  ref.get().then(function (snap) {
+    if (!snap.exists) throw new Error('not_found');
+    var d = snap.data() || {};
+    if (String(d.creatorId) !== String(uid)) throw new Error('not_your_booking');
+    if (d.status !== 'Active') throw new Error('wrong_status');
+    bizId = d.bizId || null;
+    return ref.update({
+      status: 'PendingCompletion',
+      deliveredAt: FB.serverStamp(),
+      reviewDeadline: new Date(Date.now() + 72 * 3600 * 1000),
+      updatedAt: FB.serverStamp(),
+    });
+  }).then(function () {
+    toast('Work delivered. The brand has 72 hours to review.');
+    if (bizId) {
+      DB.collection('bizNotifs').add({
+        bizId: bizId, type: 'work_delivered',
+        title: 'Work delivered',
+        body: (creatorDoc && creatorDoc.name ? creatorDoc.name : 'Creator') + ' delivered the work for your review.',
+        bookingId: String(bookingId), read: false, createdAt: FB.serverStamp(),
+      }).catch(function () {});
+    }
+  }).catch(function (e) {
+    var m = (e && e.message) || '';
+    if (m === 'not_your_booking') toast('This booking does not belong to your account.');
+    else if (m === 'wrong_status') toast('Only active bookings can be marked delivered.');
+    else toast('Could not mark as delivered. Please try again.');
+  });
+}
 function loadBookings() {
   var col = DB.collection('bookings');
   var q;
@@ -454,7 +488,9 @@ function loadBookings() {
       if (action === 'accept') {
         var patch = { status: 'Active', acceptedAt: FB.serverStamp(), acceptedByCreator: true, seenByCreator: true };
         ref.update(patch).then(notifyBiz).catch(function () { toast('Could not update booking. Please try again.'); });
-      } else {
+        return;
+      }
+      if (action === 'deliver') { deliverBooking(booking.id); return; }
         // REJECT: atomic transaction — mark cancelled + record refund intent.
         // The refund itself is finalized by the brand wallet / admin cron
         // (see api/booking-deadlines.js); the deterministic ledger id makes
@@ -462,7 +498,10 @@ function loadBookings() {
         DB.runTransaction(function (tx) {
           return tx.get(ref).then(function (snap) {
             var d = snap.data() || {};
-            var amt = Number(d.paidAmount || d.escrowAmount || 0);
+            // B-C2: refundAmount is SERVER-TRUTH — always the booking's own
+            // paidAmount (written server-side by api/booking-create.js). Never
+            // take a client-supplied refund amount.
+            var amt = Number(d.paidAmount || 0);
             var refundable = !d.barter && amt > 0 && !d.refundProcessed && d.status === 'Pending';
             var p = { status: 'Cancelled', rejectedAt: FB.serverStamp(), rejectedByCreator: true, seenByCreator: true };
             if (refundable) {
@@ -479,7 +518,6 @@ function loadBookings() {
             tx.update(ref, p);
           });
         }).then(notifyBiz).catch(function () { toast('Could not update booking. Please try again.'); });
-      }
       function notifyBiz() {
         if (booking._bizId) {
           DB.collection('bizNotifs').add({
