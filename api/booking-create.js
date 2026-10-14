@@ -8,6 +8,9 @@
  *
  * Steps:
  *  (a) verifyIdToken -> uid (booking.bizId is forced to uid)
+ *  (a2) creatorPrice must match one of the creator's listed package prices
+ *       (creators/{creatorId}.prices), tolerance <= Rs.1 — last
+ *       client-controlled pricing input; rejects underpayment of the creator
  *  (b) fetch Cashfree order -> require order_status === 'PAID'
  *  (c) server-compute expected total from booking.creatorPrice:
  *      5% Pro discount off the creator price first (brand isPro read
@@ -66,6 +69,58 @@ export default async function handler(req, res) {
   if (!(creatorPrice > 0) || creatorPrice > 10000000) return json(res, 400, { error: 'bad_creator_price' });
   const creatorId = s(draft.creatorId, 64);
   if (!creatorId) return json(res, 400, { error: 'missing_creator' });
+
+  // (a2) C7#6: verify creatorPrice against the creator's listed package
+  // prices. creatorPrice was the last client-controlled pricing input —
+  // a tampered value underpays the creator (auto-approve pays 95% of it).
+  // The creator's rate card lives in creators/{creatorId}.prices (object
+  // label -> price, the same source the brand discovery UI builds its
+  // package list from); `packages` (array) is checked as a fallback.
+  // A creatorPrice must match one listed price within Rs.1 (rounding).
+  {
+    const db0 = getAdmin().firestore();
+    let creatorSnap = null;
+    try {
+      creatorSnap = await db0.collection('creators').doc(creatorId).get();
+    } catch (e) {
+      return json(res, 500, { error: 'creator_lookup_failed' });
+    }
+    const cd = creatorSnap && creatorSnap.exists ? creatorSnap.data() : null;
+    const listed = [];
+    if (cd && cd.prices && typeof cd.prices === 'object') {
+      for (const k of Object.keys(cd.prices)) {
+        const v = cd.prices[k];
+        const n = Number(v);
+        if (Number.isFinite(n) && n > 0) listed.push(n);
+        else if (v && typeof v === 'object') {
+          for (const f of ['price', 'sale', 'amount', 'rate']) {
+            const m = Number(v[f]);
+            if (Number.isFinite(m) && m > 0) listed.push(m);
+          }
+        }
+      }
+    }
+    if (cd && Array.isArray(cd.packages)) {
+      for (const p of cd.packages) {
+        let m = NaN;
+        if (p && typeof p === 'object') {
+          m = Number(p.price != null ? p.price : (p.amount != null ? p.amount : p.rate));
+        } else {
+          m = Number(p);
+        }
+        if (Number.isFinite(m) && m > 0) listed.push(m);
+      }
+    }
+    // Creators with no rate card get a computed floor price client-side, so
+    // there is nothing server-side to verify against — accept rather than
+    // false-reject legitimate bookings.
+    if (listed.length > 0) {
+      const ok = listed.some((p) => Math.abs(p - creatorPrice) <= 1);
+      if (!ok) return json(res, 400, { error: 'creator_price_mismatch' });
+    } else {
+      console.warn('[booking-create] no rate card for creator ' + creatorId + ' — price check skipped');
+    }
+  }
 
   // (b) fetch the Cashfree order server-side
   let order;
@@ -168,8 +223,10 @@ export default async function handler(req, res) {
       tx.set(regRef, {
         uid, bookingId, amount: orderAmount, expectedTotal, creatorPrice,
         cfPaymentId: order.cf_order_id || null, cashfreeEnv: env,
+        status: 'booked', // consumed: the cron reconcile skips booked orders
+        bookedAt: FieldValue.serverTimestamp(),
         paidAt: FieldValue.serverTimestamp(), createdAt: FieldValue.serverTimestamp(),
-      });
+      }, { merge: true });
       tx.set(bookRef, doc);
     });
   } catch (e) {
