@@ -15,7 +15,7 @@ collancerlatest). **Design was not touched** — only connectivity scripts were 
 | `connect/shell-connect.js` | Parent page: handles `?ig=` Instagram OAuth return. |
 | `connect/ai/` | The Collancer AI database + answer pipeline (276-entry brain, scope guard, keyless LLM pool). |
 | `connect/lib/` | Shared `constants.js` / `format.js` (pricing math). |
-| `api/` + `lib/` | 12 Vercel serverless functions, copied from collancerlatest. `instagram-callback.js` now reads `APP_URL` from env. |
+| `api/` + `lib/` | 13 Vercel serverless functions. `instagram-callback.js` now reads `APP_URL` from env. |
 | `firestore.rules`, `firestore.indexes.json` | Copied verbatim from collancerlatest. |
 | `vercel.json` | SPA rewrite + daily `booking-deadlines` cron. |
 | `package.json` | `firebase-admin`, `ws` for the API routes. |
@@ -33,7 +33,8 @@ collancerlatest). **Design was not touched** — only connectivity scripts were 
   new deployment URL and register it in the Meta app dashboard.
 - **Collancer AI**: creator side = local database only (askCreatorAI → 276-entry
   brain → fallback); brand side = scope guard → Collancer-name questions → deterministic
-  engine → keyless pool (Pollinations direct → `/api/llm-pool` Kilo) → honest outage message.
+  engine → server-side 3-lane pool (`/api/llm`: Groq → Cloudflare → Gemini, free tier) →
+  honest outage message.
 - **Payments**: real Cashfree order + SDK v3 modal + server verify when
   `CASHFREE_APP_ID`/`CASHFREE_SECRET_KEY` are set; the existing TEST MODE demo sheet
   is kept as fallback and is honestly labeled. Manual UPI + UTR → `walletDeposits`
@@ -48,7 +49,7 @@ collancerlatest). **Design was not touched** — only connectivity scripts were 
 2. Set env vars: `FIREBASE_SERVICE_ACCOUNT_JSON`, `INSTAGRAM_APP_ID`,
    `INSTAGRAM_APP_SECRET`, `INSTAGRAM_REDIRECT_URI=https://<new-url>/api/instagram-callback`,
    `APP_URL=https://<new-url>`, `CASHFREE_APP_ID`, `CASHFREE_SECRET_KEY`,
-   `CASHFREE_ENV=test`, `CRON_SECRET` (optional).
+   `CASHFREE_ENV=test`, `CRON_SECRET` (REQUIRED — the money cron returns 401 without it).
 3. Firebase console → Authentication → Settings → Authorized domains → add `<new-url>`.
 4. Firebase console → Firestore → Rules → paste `firestore.rules` → Publish.
    Firestore → Indexes → add the 14 composite indexes from `firestore.indexes.json`.
@@ -64,7 +65,15 @@ collancerlatest). **Design was not touched** — only connectivity scripts were 
 - Cashfree production needs the VCIP video-KYC step (separate thread).
 - `collancer@upi` is still a placeholder for manual deposits.
 
-## Not deployed
+## Deploy status
 
-Nothing has been pushed or deployed. Pushing this repo does not auto-deploy unless a
-Vercel project is connected. Deploy only on explicit approval.
+Site is LIVE (HTTP 200 on the production URL). Cycles 2 (17 fixes) and 3+4
+(34 fixes) are committed and deployed. Deploy only on explicit approval.
+
+## Standing manual steps (not done by deploys)
+
+- **Firebase console → Firestore → Rules → paste `firestore.rules` → Publish.**
+  Deploys never auto-publish rules. Same for the composite indexes in
+  `firestore.indexes.json`.
+- **Vercel env:** `CRON_SECRET` must be set (money cron is fail-closed).
+- Instagram redirect-URI verification in the Meta dashboard + `APP_URL` env value.
