@@ -211,7 +211,14 @@ service cloud.firestore {
        (a) Booking status 'Pending' + brand cancels -> FULL refund:
            refundAmount = paidAmount, refundRequested = true
        (b) Booking status 'Active'  + brand cancels -> partial refund:
-           refundAmount = paidAmount - platformFee, refundRequested = true
+           refundAmount = paidAmount - platformFee, refundRequested = true.
+           The brand ALSO records statusBeforeCancel: 'Active' so the refund
+           cron can apply the 10% creator kill-fee (Cycle 13+14+15), taken
+           from the retained platform-fee portion.
+       (c) Barter/legacy (no numeric paidAmount) + brand cancels -> allowed,
+           no refund claim may be attached (Cycle 13+14+15).
+       (d) PendingCompletion + brand cancels -> DENIED (no such branch;
+           brands must approve/revise/dispute instead).
 
        These rules only ATTACH the refund request to the booking doc.
        Execution (wallet credit + ledger row) stays in the refund cron,
@@ -229,6 +236,17 @@ service cloud.firestore {
       return expected >= 0
         && (!('refundAmount' in d) || d.refundAmount == expected)
         && (!('refundRequested' in d) || d.refundRequested == true);
+    }
+
+    // Cycle 13+14+15: barter/legacy bookings carry no numeric paidAmount,
+    // so there is nothing to refund — the brand may still cancel, but no
+    // refund claim may be attached (refundAmount must be absent/0,
+    // refundRequested absent/false). Guarded on the EXISTING doc
+    // (resource), so a paid booking can never use this branch.
+    function brandCancelBarterOk(d, old) {
+      return !(old.paidAmount is number)
+        && (!('refundAmount' in d) || d.refundAmount == 0)
+        && (!('refundRequested' in d) || d.refundRequested == false);
     }
 
     match /bookings/{id} {
@@ -297,23 +315,23 @@ service cloud.firestore {
         || (isAuthed() && resource.data.bizId == request.auth.uid
           && resource.data.status == 'Pending'
           && request.resource.data.status == 'Cancelled'
-          && brandCancelRefundOk(request.resource.data, resource.data, false)
+          && (brandCancelRefundOk(request.resource.data, resource.data, false)
+            || brandCancelBarterOk(request.resource.data, resource.data))
           && request.resource.data.diff(resource.data).affectedKeys()
-            .hasOnly(['status', 'cancelledAt', 'cancelledByBiz', 'cancelReason',
-              'seenByBiz', 'refundAmount', 'refundRequested']))
+            .hasOnly(['status', 'statusBeforeCancel', 'cancelledAt', 'cancelledByBiz',
+              'cancelReason', 'seenByBiz', 'refundAmount', 'refundRequested', 'refundStatus']))
         || (isAuthed() && resource.data.bizId == request.auth.uid
           && resource.data.status == 'Active'
           && request.resource.data.status == 'Cancelled'
-          && brandCancelRefundOk(request.resource.data, resource.data, true)
+          && (brandCancelRefundOk(request.resource.data, resource.data, true)
+            || brandCancelBarterOk(request.resource.data, resource.data))
           && request.resource.data.diff(resource.data).affectedKeys()
-            .hasOnly(['status', 'cancelledAt', 'cancelledByBiz', 'cancelReason',
-              'seenByBiz', 'refundAmount', 'refundRequested']))
-        // BUSINESS approve: PendingCompletion -> Completed
-        || (isAuthed() && resource.data.bizId == request.auth.uid
-          && resource.data.status == 'PendingCompletion'
-          && request.resource.data.status == 'Completed'
-          && request.resource.data.diff(resource.data).affectedKeys()
-            .hasOnly(['status', 'approvedAt', 'approvedByBiz', 'payoutStatus', 'updatedAt', 'seenByBiz']))
+            .hasOnly(['status', 'statusBeforeCancel', 'cancelledAt', 'cancelledByBiz',
+              'cancelReason', 'seenByBiz', 'refundAmount', 'refundRequested', 'refundStatus']))
+        // BUSINESS approve: PendingCompletion -> Completed — REMOVED
+        // (Cycle 13+14+15): only the server may mark a booking Completed
+        // (via /api/booking-action with the Admin SDK, bypassing rules).
+        // The old client-side brand-approve branch bypassed the server flow.
         // BUSINESS revision: PendingCompletion -> Active
         || (isAuthed() && resource.data.bizId == request.auth.uid
           && resource.data.status == 'PendingCompletion'
@@ -358,14 +376,6 @@ service cloud.firestore {
       allow update, delete: if false; // append-only ledger
     }
 
-    /* ---------------- wallet_ledger (server-only via Admin SDK) ----------------
-       Canonical ledger collection. No client reads or writes — the server
-       (Admin SDK) bypasses rules entirely. */
-
-    match /wallet_ledger/{id} {
-      allow read, write: if false;
-    }
-
     /* ---------------- payouts ---------------- */
 
     // Canonical creator earnings for a payout booking (95% of creatorPrice).
@@ -377,7 +387,9 @@ service cloud.firestore {
     match /payoutRequests/{id} {
       allow read: if isAdmin() || (isAuthed() && resource.data.creatorId == request.auth.uid);
       // B-H4: payout amount must EXACTLY equal the booking's canonical
-      // creator earnings — Math.round(creatorPrice * 0.95). bookingId is
+      // creator earnings — round(creatorPrice * 0.95). The rules language
+      // has NO Math.round, so the equality is expressed with integer
+      // arithmetic: |amount*100 - creatorPrice*95| <= 50. bookingId is
       // required in both branches so no invented amounts pass. One payout
       // per booking: the doc id is bound to the booking so duplicate
       // (double-submit / duped client) payout requests are denied.
@@ -386,7 +398,8 @@ service cloud.firestore {
         && request.resource.data.amount >= 100
         && request.resource.data.bookingId is string
         && request.resource.id == 'payout_' + request.resource.data.bookingId
-        && request.resource.data.amount == Math.round(payoutBookingData().creatorPrice * 0.95)
+        && request.resource.data.amount * 100 >= payoutBookingData().creatorPrice * 95 - 50
+        && request.resource.data.amount * 100 <= payoutBookingData().creatorPrice * 95 + 50
         && (request.resource.data.creatorId == request.auth.uid
           // brand may queue payout for its completed booking
           || (payoutBookingData().bizId == request.auth.uid
@@ -478,6 +491,13 @@ service cloud.firestore {
     // carry bookingId of that booking. get() on a missing booking doc
     // errors -> the create is denied (fail closed). This closes the old
     // any-user-can-rate-any-creator hole noted in the B-M9 comment above.
+    // Cycle 13+14+15:
+    //  - one review per booking: the review doc id MUST equal bookingId.
+    //    updates/deletes are denied, so a second create for the same
+    //    booking collides on the doc id and is rejected. (Client/server
+    //    review writers must use bookingId as the review doc id.)
+    //  - self-deal guard: creatorId == auth.uid is denied (a user cannot
+    //    review themselves even if they somehow booked themselves).
     function completedBookingWith(bid, reviewee) {
       let b = get(/databases/$(database)/documents/bookings/$(bid)).data;
       return b.status == 'Completed'
@@ -490,8 +510,10 @@ service cloud.firestore {
       allow create: if isAuthed()
         && request.resource.data.bookingId is string
         && request.resource.data.bookingId.size() > 0
+        && request.resource.id == request.resource.data.bookingId
         && request.resource.data.creatorId is string
         && request.resource.data.creatorId.size() > 0
+        && request.resource.data.creatorId != request.auth.uid
         && completedBookingWith(request.resource.data.bookingId, request.resource.data.creatorId)
         && request.resource.data.stars is number
         && request.resource.data.stars >= 1
