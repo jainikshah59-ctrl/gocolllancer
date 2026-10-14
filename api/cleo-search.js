@@ -89,6 +89,19 @@ export default async function handler(req, res) {
     searchedAt: new Date().toISOString(), live: false, reason,
   });
   try {
+    // Rate limit: 30 live searches per minute per IP.
+    const { rateLimit } = await import('../lib/rateLimit.js');
+    if (!rateLimit(req, res, { max: 30, windowMs: 60000, key: 'cleo-search' })) return;
+    // Auth: a Firebase ID token is required (same verifyUid pattern as other
+    // server APIs) — live web scraping must not be an open resource.
+    try {
+      const { verifyUid } = await import('../lib/firebaseAdmin.js');
+      const tok = req.query?.idToken
+        || ((req.headers && req.headers.authorization) || '').replace(/^Bearer\s+/i, '');
+      await verifyUid(tok);
+    } catch {
+      return fail('auth_required');
+    }
     const q = String(req.query?.q || '').trim().slice(0, 200);
     if (!q) return fail('missing q');
 
