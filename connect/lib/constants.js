@@ -6,6 +6,8 @@ export const TAGLINE = 'WHERE INFLUENCE MEETS INDUSTRY';
 export const COLLANCER_UPI_ID = 'collancer@upi';
 
 export const PLATFORM_FEE_PCT = 12; // % added on creator price (brand side)
+/* Fee model: 12% brand-side + 5% creator-side (Jainik decision 2026-10-14 —
+ * do NOT change to Collabstr 10%/15% without explicit approval). */
 export const PRO_DISCOUNT_PCT = 5;  // % business-Pro discount on creator price
 export const CREATOR_SHARE_PCT = 95; // % of creatorPrice the creator earns (5% platform cut)
 export const MIN_FOLLOWERS = 10000;
