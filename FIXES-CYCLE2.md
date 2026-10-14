@@ -3,7 +3,7 @@
 **Date:** 2026-10-14  
 **Approved by:** Jainik (all 18 approved)  
 **Commit base:** 5de7fb8  
-**Status:** Implemented locally, verified with `node --check`. NOT pushed, NOT deployed (awaiting explicit permission).
+**Status:** Committed as `d25390e` and DEPLOYED LIVE to gocolllancer production (Jainik approved all items + said "krdo"). Verified with `node --check`; post-deploy check: API responding.
 
 ---
 
@@ -95,7 +95,8 @@
 
 ## Verification
 - `node --check` passes on all 9 modified/created JS files.
-- No pushes, no deploys — local only, awaiting Jainik's explicit permission.
+- Deployed: commit `d25390e` pushed, Vercel READY, live site serving the fixes.
+- Standing post-deploy caveat: `CRON_SECRET` must still be set in the Vercel dashboard (pending).
 
 ## Files changed
 1. `api/booking-deadlines.js` — ESM import, fail-closed CRON_SECRET, biz-doc guard, idempotent refunds, reject-refund finalization
