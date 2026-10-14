@@ -6,17 +6,58 @@
  * transaction: payoutRequests/payout_{bookingId} with the canonical 95% of
  * creatorPrice. Never trusts the client for amounts or ownership.
  *
+ * Customer-id hardening (C13): for cashfree bookings, the booking's
+ * paymentReference order is re-fetched from Cashfree and its customer_id
+ * must match the booking's brand (fail closed — a missing customer binding
+ * denies the approve instead of skipping the check).
+ *
+ * Sub-Rs.100 shares are QUEUED with status 'accumulating' — never dropped,
+ * so small creator earnings can be combined with future payouts by admin.
+ *
  * Input:  { idToken, action: 'approve', bookingId }
- * Output: { ok: true, bookingId, payoutCreated, share } on success.
+ * Output: { ok: true, bookingId, payoutCreated, share, payoutStatus } on success.
  */
 import { getAdmin, verifyUid, readBody } from '../lib/firebaseAdmin.js';
 import { FieldValue } from 'firebase-admin/firestore';
+import { creatorShare } from '../lib/pricing.js';
+
+const CF_API_VERSION = '2023-08-01';
+function cfBase(env) {
+  return env === 'production' ? 'https://api.cashfree.com/pg' : 'https://sandbox.cashfree.com/pg';
+}
 
 function json(res, code, obj) {
   res.statusCode = code;
   res.setHeader('Content-Type', 'application/json');
   res.setHeader('Cache-Control', 'no-store');
   res.end(JSON.stringify(obj));
+}
+
+/* Verify the Cashfree order that funded this booking is bound to the brand.
+ * Fail closed: missing customer_id (or any verify failure) denies. */
+async function verifyOrderOwner(orderId, bizId) {
+  const appId = process.env.CASHFREE_APP_ID;
+  const secret = process.env.CASHFREE_SECRET_KEY;
+  if (!appId || !secret) return { ok: false, error: 'payment_verify_unavailable' };
+  const env = (process.env.CASHFREE_ENV || 'test').toLowerCase() === 'production' ? 'production' : 'test';
+  let order;
+  try {
+    const cfRes = await fetch(cfBase(env) + '/orders/' + encodeURIComponent(orderId), {
+      headers: {
+        'x-api-version': CF_API_VERSION,
+        'x-client-id': appId,
+        'x-client-secret': secret,
+      },
+    });
+    order = await cfRes.json().catch(() => ({}));
+    if (!cfRes.ok) return { ok: false, error: cfRes.status === 404 ? 'order_not_found' : 'order_verify_failed' };
+  } catch {
+    return { ok: false, error: 'order_verify_failed' };
+  }
+  const cust = order.customer_details && order.customer_details.customer_id;
+  if (!cust) return { ok: false, error: 'order_not_bound' };
+  if (String(cust) !== String(bizId)) return { ok: false, error: 'order_owner_mismatch' };
+  return { ok: true };
 }
 
 export default async function handler(req, res) {
@@ -44,6 +85,26 @@ export default async function handler(req, res) {
   if (!bookingId) return json(res, 400, { error: 'missing_booking' });
 
   const db = getAdmin().firestore();
+
+  // Customer-id hardening (fail closed) for cashfree-funded bookings: the
+  // order that funded this booking must be bound to the brand. Done BEFORE
+  // the transaction (network I/O does not belong inside a retried txn).
+  {
+    const pre = await db.collection('bookings').doc(bookingId).get().catch(() => null);
+    if (!pre || !pre.exists) return json(res, 404, { error: 'not_found' });
+    const b0 = pre.data() || {};
+    if (String(b0.bizId) !== String(uid)) return json(res, 403, { error: 'not_your_booking' });
+    if (String(b0.paymentMethod || '') === 'cashfree') {
+      const orderId = String(b0.paymentReference || '');
+      if (!orderId) return json(res, 403, { error: 'payment_reference_missing' });
+      const chk = await verifyOrderOwner(orderId, b0.bizId);
+      if (!chk.ok) {
+        console.error('[booking-action] order owner check', chk.error, orderId.slice(0, 24));
+        return json(res, 403, { error: chk.error });
+      }
+    }
+  }
+
   try {
     const out = await db.runTransaction(async (tx) => {
       const ref = db.collection('bookings').doc(bookingId);
@@ -78,25 +139,31 @@ export default async function handler(req, res) {
         seenByBiz: true,
       });
 
-      // Canonical creator share: Math.round(creatorPrice * 0.95), exactly as
+      // Canonical creator share: 95% of creatorPrice (lib/pricing), exactly as
       // the payoutRequests rule demands. Deterministic id payout_{bookingId}
       // so a retried approve can never queue a duplicate payout.
-      const share = Math.round(Number(b.creatorPrice || 0) * 0.95);
+      // Sub-Rs.100 shares are QUEUED with status 'accumulating' — small
+      // creator earnings must never vanish; admin combines them with
+      // future payouts.
+      const share = creatorShare(b.creatorPrice);
+      const payoutStatus = share >= 100 ? 'pending' : (share > 0 ? 'accumulating' : 'none');
       let payoutCreated = false;
-      if (share >= 100 && b.creatorId) {
+      if (share > 0 && b.creatorId) {
         const payoutRef = db.collection('payoutRequests').doc('payout_' + bookingId);
         const payoutSnap = await tx.get(payoutRef);
         if (!payoutSnap.exists) {
           tx.set(payoutRef, {
             bookingId, creatorId: b.creatorId, bizId: uid,
-            amount: share, status: 'pending',
+            amount: share, status: payoutStatus,
             createdAt: FieldValue.serverTimestamp(),
-            note: 'Booking approved by brand: escrow released',
+            note: payoutStatus === 'pending'
+              ? 'Booking approved by brand: escrow released'
+              : 'Booking approved by brand: escrow released — share below the Rs.100 payout floor, accumulates with future payouts',
           });
           payoutCreated = true;
         }
       }
-      return { payoutCreated, share };
+      return { payoutCreated, share, payoutStatus };
     });
     return json(res, 200, { ok: true, bookingId, ...out });
   } catch (e) {
