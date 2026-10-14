@@ -240,6 +240,14 @@ function ensureBusinessDoc(u, email, bizName, extra) {
       bizName: bizName || email.split('@')[0] || 'Business',
       email: email, phone: '', pfp: '', industry: '', address: '',
       walletBalance: 0, isPro: false, proActive: false,
+      /* Pro subscription (Cycle 12, Item 21): paid Business Pro. Schema:
+       *   proSubscription = { status: 'active'|'cancelled'|'expired',
+       *     startedAt: <Date/Timestamp>, expiresAt: <Date/Timestamp>,
+       *     amount: 999 }
+       * Legacy free Pro (isPro && proActive) is grandfathered; new Pro
+       * activations go through the "Go Pro" button (Cashfree order with
+       * purpose 'pro_subscription'). Null until the first paid activation. */
+      proSubscription: null,
       createdAt: FB.serverStamp(),
     };
     if (extra) {
@@ -256,6 +264,7 @@ function afterLogin(u) {
   loadCreators();
   loadBookings();
   loadMarketplace();
+  loadSaved();
   loadWalletLedger();
   loadNotifications();
 }
@@ -268,16 +277,41 @@ function loadBusiness() {
       S.name = bizDoc.bizName || S.name;
       S.email = bizDoc.email || S.email;
       S.wallet = Number(bizDoc.walletBalance || 0);
+      S.bizVerified = !!bizDoc.verified;
+      S.bizGstin = bizDoc.gstin || '';
       if (S.route === 'wallet') { try { render(); } catch (e) {} }
+      if (S.route === 'dashboard') { try { render(); } catch (e) {} }
     }
   }, function () { bizDoc = null; }));
 }
-function bizIsPro() { return !!(bizDoc && bizDoc.isPro && bizDoc.proActive); }
-try { window.collancerIsPro = bizIsPro; } catch (e) {}
+/* Business Pro gating (Cycle 12, Item 21 — paid Pro, ₹999/month).
+ * isProActive() is the single source of truth for the 5% Pro discount:
+ *  - paid subscription: proSubscription.status === 'active' && expiresAt > now
+ *  - grandfathered: legacy free Pro (isPro && proActive) keeps working.
+ * New Pro activations go through the "Go Pro — ₹999/month" button (A.gopro),
+ * which creates a Cashfree order with purpose 'pro_subscription' and stamps
+ * proSubscription on the business doc after a verified payment.
+ * OPEN (hardening): move the post-payment proSubscription stamp into a
+ * server-verified path (cashfree-webhook / dedicated API) instead of the
+ * client write — client writes are convenient but forgeable. */
+var PRO_SUBSCRIPTION_PRICE = 999; // ₹/month (Jainik decision 2026-10-14)
+function isProActive() {
+  if (!bizDoc) return false;
+  var sub = bizDoc.proSubscription;
+  if (sub && sub.status === 'active') {
+    var exp = sub.expiresAt;
+    var expMs = exp && exp.toMillis ? exp.toMillis() : Date.parse(exp);
+    if (expMs && expMs > Date.now()) return true;
+  }
+  // Grandfathered: legacy free Pro keeps its discount.
+  return !!(bizDoc.isPro && bizDoc.proActive);
+}
+function bizIsPro() { return isProActive(); }
+try { window.collancerIsPro = bizIsPro; window.collancerIsProActive = isProActive; } catch (e) {}
 function pricingFor(creatorPrice) {
   // Canonical rule: 5% Pro discount off the CREATOR PRICE first,
   // then 12% platform fee on the DISCOUNTED price.
-  var discount = bizIsPro() ? Math.round(creatorPrice * 0.05) : 0;
+  var discount = isProActive() ? Math.round(creatorPrice * 0.05) : 0;
   var discounted = creatorPrice - discount;
   var fee = Math.round(discounted * 0.12);
   return { creatorPrice: creatorPrice, discountedPrice: discounted, fee: fee, discount: discount, total: discounted + fee };
@@ -288,22 +322,17 @@ function mapCreator(doc) {
   var d = doc.data(), ig = d.instagram || {};
   var followers = ig.followersCount != null ? ig.followersCount : (d.followers || 0);
   var ins = ig.insights || {};
+  /* Honest pricing: only the creator's real prices are ever shown. When the
+   * creator has not set prices, pk stays empty and the UI shows
+   * "Custom rates" instead of invented numbers. */
   var pk = [];
   if (d.prices && typeof d.prices === 'object') {
     Object.keys(d.prices).forEach(function (k) {
       pk.push([k, '', Number(d.prices[k]) || 0]);
     });
   }
-  if (!pk.length) {
-    var base = Math.max(500, Math.round(followers * 0.15));
-    pk = [
-      ['Instagram Story', '24-hr story with swipe-up/link', base],
-      ['Instagram Reel', '30-60s reel with caption + hashtags', Math.round(base * 2.2)],
-      ['Instagram Post', 'In-feed static/carousel post', Math.round(base * 1.4)],
-    ];
-  }
-  var low = Math.min.apply(null, pk.map(function (p) { return p[2]; }));
-  var high = Math.max.apply(null, pk.map(function (p) { return p[2]; }));
+  var low = pk.length ? Math.min.apply(null, pk.map(function (p) { return p[2]; })) : 0;
+  var high = pk.length ? Math.max.apply(null, pk.map(function (p) { return p[2]; })) : 0;
   return {
     id: doc.id,
     name: d.name || 'Creator',
@@ -313,12 +342,16 @@ function mapCreator(doc) {
     views: fmtCount(ins.avgViews || d.avgViews || 0),
     reach: fmtCount(ins.reach || 0),
     likes: fmtCount(ins.avgLikes || 0),
-    conv: inr(low) + ' \u2013 ' + inr(high),
+    conv: pk.length ? (inr(low) + ' \u2013 ' + inr(high)) : '—',
     pk: pk,
+    _hasPrices: pk.length > 0,
+    _minPrice: low,
     _followers: followers,
+    _engagement: Number(ig.engagementRate || d.engagementRate || 0),
     _niche: d.niche || '', _city: d.city || '',
     _platform: d.platform || 'Instagram',
     _pfp: ig.profilePicUrl || d.pfp || '',
+    portfolio: Array.isArray(d.portfolioMediaIds) ? d.portfolioMediaIds.filter(function (u) { return typeof u === 'string' && u; }).slice(0, 6) : [],
   };
 }
 function loadCreators() {
@@ -358,14 +391,19 @@ function loadBookings() {
       var d = doc.data();
       arr.push({
         camp: d.campaignName || '', creator: d.creatorName || '',
+        creatorId: d.creatorId || '',
         pkg: d.packageKey || '', type: d.type || 'paid',
         deadline: d.deadline || '', total: Number(d.paidAmount || d.amount || 0),
+        price: Number(d.creatorPrice || 0), fee: Number(d.platformFee || 0),
         oid: doc.id, _status: d.status || 'Pending',
         revs: d.revisions || '', revCount: Number(d.revisionCount || 0),
+        isCustomOffer: !!d.isCustomOffer, offerStatus: d.offerStatus || '',
+        offerPrice: Number(d.offerPrice || 0), reviewed: false,
       });
     });
     try {
       S.bookings = arr;
+      markReviewed();
       if (S.route === 'dashboard') render();
     } catch (e) {}
   };
@@ -516,6 +554,73 @@ function wireActions() {
     });
   };
 
+  /* Paid-but-unsaved retry (one tap): re-call booking-create with the same
+   * orderId. The server order registry consumes the existing row instead of
+   * 409, so this never double-charges. */
+  A.retrybk = function () {
+    var st = retryState;
+    retryState = null;
+    if (!st || !st.orderId) { toast('No pending payment to retry.'); return; }
+    var booking = buildBooking('cashfree', st.orderId, true, st.env || 'test');
+    if (!booking) { showBookingRetryModal(st.orderId, st.env, st.amount); return; }
+    toast('Retrying booking save\u2026');
+    // 1b: the retry replays the same booking attempt, so it needs the same
+    // 32-hex collaborationFingerprint the server requires.
+    sha256hex(JSON.stringify(fingerprintParts())).then(function (fp) {
+      booking.collaborationFingerprint = fp;
+      return FB.api('booking-create', { orderId: st.orderId, booking: booking });
+    })
+      .then(function (r) {
+        var id = (r && r.bookingId) || null;
+        if (!id) { showBookingRetryModal(st.orderId, st.env, st.amount); return; }
+        hideBookingRetryModal();
+        notifyCreator(booking.creatorId, id, 'New collaboration request',
+          (booking.bizName || 'A brand') + ' booked ' + (booking.campaignName || 'a campaign') + '.');
+        uiBookingDone(id, 'CF');
+        try { S.bk.oid = id; if (S.bookings && S.bookings[0]) S.bookings[0].oid = id; sheet(); } catch (e) {}
+        loadBookings();
+      })
+      .catch(function () { showBookingRetryModal(st.orderId, st.env, st.amount); });
+  };
+  A.retrybkx = function () { hideBookingRetryModal(); };
+
+  /* Business Pro upgrade (Cycle 12, Item 21): paid subscription ₹999/month.
+   * Creates a real Cashfree order with purpose 'pro_subscription'
+   * (realCashfreePay passes its label through as `purpose` to
+   * /api/cashfree-order, and already verifies PAID + amount server-side via
+   * /api/cashfree-verify before calling back with a non-null orderId).
+   * On verified payment, stamps proSubscription on the business doc; the 5%
+   * discount gates on isProActive() so it takes effect immediately.
+   * OPEN (hardening): stamp proSubscription server-side (cashfree-webhook /
+   * dedicated API) instead of this client write. */
+  A.gopro = function (t) {
+    if (isProActive()) { toast('Business Pro is already active.'); return; }
+    var btnEl = (t && t.tagName === 'BUTTON') ? t : (t && t.closest ? t.closest('button') : null);
+    if (btnEl) btnEl.disabled = true;
+    var release = function () { if (btnEl) btnEl.disabled = false; };
+    toast('Opening secure payment…');
+    realCashfreePay(PRO_SUBSCRIPTION_PRICE, 'pro_subscription', function (orderId, env) {
+      release();
+      if (!orderId) { toast('Payment not completed.'); return; } // unconfigured / cancelled / unverified
+      toast('Confirming subscription…');
+      var nowMs = Date.now();
+      DB.collection('businesses').doc(uid).set({
+        isPro: true, proActive: true,
+        proSubscription: {
+          status: 'active',
+          startedAt: new Date(nowMs),
+          expiresAt: new Date(nowMs + 30 * 24 * 60 * 60 * 1000),
+          amount: PRO_SUBSCRIPTION_PRICE,
+        },
+      }, { merge: true }).then(function () {
+        toast('Business Pro activated — 5% off every paid booking.');
+        try { if (window.render) window.render(); } catch (e) {}
+      }).catch(function () {
+        toast('Payment succeeded but activation failed. Contact support with order ' + orderId + '.');
+      });
+    });
+  };
+
   /* Marketplace: persist requirement for real */
   var _postgo = A.postgo;
   A.postgo = function () {
@@ -621,6 +726,33 @@ function realCashfreePay(amount, label, cb) {
   }).catch(function () { done(null); });
 }
 
+/* Paid-but-unsaved retry: if /api/booking-create fails after a successful
+ * Cashfree payment, show a modal with a one-tap Retry that re-calls
+ * booking-create with the SAME orderId. The server-side order registry
+ * makes this idempotent: it consumes the existing order row instead of
+ * returning 409, so the user is never charged twice. */
+var retryState = null;
+function showBookingRetryModal(orderId, env, amount) {
+  retryState = { orderId: orderId, env: env, amount: amount };
+  var cf = document.getElementById('cf');
+  if (!cf) { toast('Payment succeeded but booking save failed. Contact support.'); return; }
+  cf.className = 'ov on';
+  cf.innerHTML = '<div class="dim" style="background:rgba(11,18,23,.55)"></div>' +
+    '<div class="w"><div class="glass sh" style="padding:26px 22px">' +
+    '<h2 style="font-size:20px;font-weight:800;margin:0 0 8px">Payment received</h2>' +
+    '<p class="sub" style="margin:0 0 4px">Your payment of ' + inr(amount) + ' went through, but the booking could not be saved. Tap Retry to finish \u2014 you will <b>not</b> be charged again.</p>' +
+    '<div style="padding:10px 12px;border-radius:16px;background:rgba(15,40,60,.05);font-size:12.5px;color:#55616d;margin-top:10px">Order ID <b style="color:#0b1217;margin-left:6px">' + esc(String(orderId || '')) + '</b></div>' +
+    '<div style="display:flex;gap:10px;margin-top:18px">' +
+    '<div style="flex:1">' + '<button type="button" class="black" data-a="retrybk" style="width:100%;height:48px;border-radius:24px">Retry</button>' + '</div>' +
+    '<div style="flex:1">' + '<button type="button" class="glass" data-a="retrybkx" style="width:100%;height:48px;border-radius:24px;font-weight:800;font-size:15px;cursor:pointer">Dismiss</button>' + '</div>' +
+    '</div></div></div>';
+}
+function hideBookingRetryModal() {
+  var cf = document.getElementById('cf');
+  if (cf) cf.className = 'ov';
+  retryState = null;
+}
+
 function payWithCashfreeBooking(T) {
   toast('Opening secure payment\u2026');
   realCashfreePay(T.t, 'Booking \u00B7 ' + ((S.bk.f && S.bk.f.campaign) || ''), function (orderId, env) {
@@ -631,10 +763,16 @@ function payWithCashfreeBooking(T) {
     // B-C1: booking + all money fields are written SERVER-SIDE via
     // /api/booking-create (payment verified, amount recomputed, order
     // registry prevents reuse). Never write the booking doc from the client.
-    FB.api('booking-create', { orderId: orderId, booking: booking })
+    // 1b: the server requires a 32-hex collaborationFingerprint on the draft —
+    // compute it exactly like the wallet/barter paths do and include it in
+    // the booking draft sent to /api/booking-create.
+    sha256hex(JSON.stringify(fingerprintParts())).then(function (fp) {
+      booking.collaborationFingerprint = fp;
+      return FB.api('booking-create', { orderId: orderId, booking: booking });
+    })
       .then(function (r) {
         var id = (r && r.bookingId) || null;
-        if (!id) { toast('Payment succeeded but booking save failed. Contact support.'); return; }
+        if (!id) { showBookingRetryModal(orderId, env, T.t); return; }
         notifyCreator(booking.creatorId, id, 'New collaboration request',
           (booking.bizName || 'A brand') + ' booked ' + (booking.campaignName || 'a campaign') + '.');
         uiBookingDone(id, 'CF');
@@ -644,8 +782,9 @@ function payWithCashfreeBooking(T) {
       .catch(function (e) {
         var m = (e && e.message) || '';
         if (/already[ _-]?used|reused|order_reused/i.test(m)) toast('This payment was already used for a booking.');
+        else if (/bad_fingerprint|fingerprint/i.test(m)) toast('Booking fingerprint error. Please try again.');
         else if (/amount_mismatch|amount/i.test(m)) toast('Payment amount did not match the booking total. Contact support.');
-        else toast('Payment succeeded but booking save failed. Contact support.');
+        else showBookingRetryModal(orderId, env, T.t);
       });
   });
 }
@@ -653,10 +792,12 @@ function payWithCashfreeBooking(T) {
 /* Brand review of delivered work. Exposed as a global for the booking sheet:
  *   window.collancerReviewBooking(bookingId, 'approve')
  *   window.collancerReviewBooking(bookingId, 'revision', note)
- *   window.collancerReviewBooking(bookingId, 'dispute', reason)
+ *   window.collancerReviewBooking(bookingId, 'dispute', reason, evidenceUrls)
+ * evidenceUrls: optional array of evidence link strings (Item 19) — stored
+ * as disputeEvidence on the booking (rules allow the key on dispute).
  * Verifies the booking belongs to this brand (bizId === uid) before writing.
  * All update shapes match firestore.rules exactly (rule-safe field lists). */
-function reviewBooking(bookingId, decision, note) {
+function reviewBooking(bookingId, decision, note, evidence) {
   var ref = DB.collection('bookings').doc(String(bookingId || ''));
   toast('Updating booking\u2026');
   return ref.get().then(function (snap) {
@@ -665,12 +806,15 @@ function reviewBooking(bookingId, decision, note) {
     if (String(d.bizId) !== String(uid)) throw new Error('not_your_booking');
     if (d.status !== 'PendingCompletion') throw new Error('wrong_status');
     if (decision === 'approve') {
-      // Rule-safe: BUSINESS approve allows status/approvedAt/approvedByBiz/
-      // payoutStatus/updatedAt/seenByBiz (NOT completedAt — that write is denied).
-      return ref.update({
-        status: 'Completed', approvedAt: FB.serverStamp(), approvedByBiz: true,
-        updatedAt: FB.serverStamp(), seenByBiz: true,
-      });
+      // Escrow auto-release (Item 15): the approve runs server-side via
+      // /api/booking-action — it verifies the brand owns the booking, sets
+      // status Completed, and creates the payoutRequests doc (canonical 95%
+      // creator share) atomically. The client never writes Completed or
+      // payout rows directly.
+      return FB.api('booking-action', { action: 'approve', bookingId: String(bookingId) })
+        .then(function (r) {
+          if (!r || r.ok !== true) throw new Error('approve_failed');
+        });
     }
     if (decision === 'revision') {
       // Revision-cap enforcement: the booking's `revisions` text (e.g.
@@ -690,15 +834,22 @@ function reviewBooking(bookingId, decision, note) {
     }
     if (decision === 'dispute') {
       // Rule-safe: BUSINESS dispute allows status/disputeReason/
-      // disputeOpenedAt/disputeOpenedBy/updatedAt/seenByBiz.
-      return ref.update({
+      // disputeEvidence/disputeOpenedAt/disputeOpenedBy/updatedAt/seenByBiz.
+      // Item 19: evidence links are stored as disputeEvidence entries.
+      var evDocs = (Array.isArray(evidence) ? evidence : [])
+        .map(function (u) { return { url: String(u || '').slice(0, 500), at: new Date().toISOString(), by: uid }; })
+        .filter(function (x) { return x.url; })
+        .slice(0, 3);
+      var patch = {
         status: 'Disputed',
         disputeReason: String(note || '').slice(0, 1000),
         disputeOpenedAt: FB.serverStamp(),
         disputeOpenedBy: uid,
         updatedAt: FB.serverStamp(),
         seenByBiz: true,
-      });
+      };
+      if (evDocs.length) patch.disputeEvidence = evDocs;
+      return ref.update(patch);
     }
     throw new Error('bad_decision');
   }).then(function () {
@@ -756,7 +907,7 @@ function loadMarketplace() {
       var d = doc.data();
       var nm = d.bizName || 'Brand';
       arr.push({
-        id: doc.id, brand: nm,
+        id: doc.id, brand: nm, verified: !!d.bizVerified,
         ini: nm.split(' ').map(function (x) { return x.charAt(0); }).join('').slice(0, 2).toUpperCase(),
         ago: agoStr(d.createdAt), status: (d.status || 'open').toUpperCase(),
         title: d.title || '', desc: d.description || '',
@@ -777,7 +928,7 @@ function loadMarketplace() {
         if (d.bizId !== uid) return;
         var nm = d.bizName || 'Brand';
         arr.push({
-          id: doc.id, brand: nm,
+          id: doc.id, brand: nm, verified: !!d.bizVerified,
           ini: nm.split(' ').map(function (x) { return x.charAt(0); }).join('').slice(0, 2).toUpperCase(),
           ago: agoStr(d.createdAt), status: (d.status || 'open').toUpperCase(),
           title: d.title || '', desc: d.description || '',
@@ -914,5 +1065,285 @@ function brandAiSend() {
     });
   }).catch(function () { typing.remove(); });
 }
+
+  /* ---------------- Cycle 12 Worker D: discovery shortlist, chat, custom offers, reviews, invoice, dispute evidence ---------------- */
+
+/* Item 10 — shortlist: savedCreators/{bizUid}/creators/{creatorId} */
+function loadSaved() {
+  if (!uid) return;
+  try { S.saved = S.saved || {}; } catch (e) {}
+  track(DB.collection('savedCreators').doc(uid).collection('creators').onSnapshot(function (snap) {
+    var m = {};
+    snap.forEach(function (doc) { m[doc.id] = true; });
+    try {
+      S.saved = m;
+      if (S.route === 'discover') { var l = document.getElementById('list'); if (l && window.listHTML) l.innerHTML = window.listHTML(); }
+    } catch (e) {}
+  }, function () {}));
+}
+function toggleSave(creatorId) {
+  var id = String(creatorId || '');
+  if (!id) return;
+  if (!uid) { toast('Log in to save creators to your shortlist.'); return; }
+  var ref = DB.collection('savedCreators').doc(uid).collection('creators').doc(id);
+  var was = !!((function () { try { return S.saved; } catch (e) { return {}; } })() || {})[id];
+  toast(was ? 'Removed from shortlist.' : 'Saved to your shortlist.');
+  (was ? ref.delete() : ref.set({ creatorId: id, savedAt: FB.serverStamp() }))
+    .catch(function () { toast('Could not update shortlist. Please try again.'); });
+}
+try { window.collancerToggleSave = toggleSave; } catch (e) {}
+
+/* Item 13 — custom offer: brand proposes a price; the booking is created
+ * unpaid (money-safe client write, same shape as the barter path). Payment
+ * is collected later via collancerPayOffer once the creator accepts. */
+function sendCustomOffer(draft) {
+  var b = null;
+  try { b = S.bk; } catch (e) {}
+  if (!b || !uid) { toast('Offer service is loading. Please try again.'); return; }
+  var price = Math.floor(Number(draft.offerPrice) || 0);
+  if (!(price >= 100)) { toast('Enter an offer of at least \u20B9100.'); return; }
+  toast('Sending your offer\u2026');
+  var fpInput = JSON.stringify({ bizId: uid, creatorId: draft.creatorId, packageKey: 'offer', campaignName: draft.campaignName || '', deadline: draft.deadline || '', offerPrice: price });
+  sha256hex(fpInput).then(function (fp) {
+    var id = 'collab_' + fp;
+    var bizName = 'Business';
+    try { bizName = (S.name || (bizDoc && bizDoc.bizName) || 'Business').slice(0, 120); } catch (e) {}
+    var doc = {
+      creatorId: String(draft.creatorId || ''), creatorName: String(draft.creatorName || 'Creator').slice(0, 120),
+      creatorHandle: String(draft.creatorHandle || '').slice(0, 120),
+      creatorPlatform: String(draft.creatorPlatform || '').slice(0, 60),
+      creatorNiche: String(draft.creatorNiche || '').slice(0, 80),
+      creatorCity: String(draft.creatorCity || '').slice(0, 80),
+      bizId: uid, bizName: bizName,
+      bizPfp: (bizDoc && bizDoc.pfp) || null,
+      type: 'paid', packageKey: null,
+      campaignName: String(draft.campaignName || '').slice(0, 160),
+      productName: String(draft.productName || '').slice(0, 160),
+      brief: String(draft.brief || '').slice(0, 4000),
+      deliverables: String(draft.deliverables || '').slice(0, 2000),
+      platform: String(draft.platform || '').slice(0, 60),
+      deadline: String(draft.deadline || '').slice(0, 40),
+      targetAudience: String(draft.targetAudience || '').slice(0, 400),
+      category: String(draft.category || '').slice(0, 80),
+      hashtags: String(draft.hashtags || '').slice(0, 400),
+      websiteLink: String(draft.websiteLink || '').slice(0, 500),
+      cta: String(draft.cta || '').slice(0, 200),
+      usageRights: String(draft.usageRights || '').slice(0, 800),
+      revisions: String(draft.revisions || '').slice(0, 80),
+      exclusivity: String(draft.exclusivity || '').slice(0, 200),
+      requirements: String(draft.requirements || '').slice(0, 2000),
+      contactNumber: String(draft.contactNumber || '').slice(0, 40),
+      contact: String(draft.contact || '').slice(0, 40),
+      shipping: String(draft.shipping || '').slice(0, 400),
+      mediaFiles: [],
+      amount: 0, creatorPrice: 0, escrowAmount: 0, platformFee: 0, proDiscount: 0,
+      paidAmount: 0, paymentMethod: null, paymentStatus: 'not_required',
+      escrowStatus: 'not_required', paymentReference: null, demoPayment: false,
+      paymentApproved: false, refundProcessed: false, refundStatus: null,
+      isCustomOffer: true, offerStatus: 'pending', offerPrice: price,
+      status: 'Pending', seenByCreator: false, seenByBiz: true,
+      collaborationFingerprint: fp,
+      acceptDeadline: new Date(Date.now() + 72 * 3600 * 1000),
+      reviewDeadline: null, autoCancelled: false, autoApproved: false,
+      paidAt: null, createdAt: FB.serverStamp(), updatedAt: FB.serverStamp(),
+    };
+    return DB.collection('bookings').doc(id).set(doc).then(function () { return id; });
+  }).then(function (id) {
+    notifyCreator(draft.creatorId, id, 'New custom offer',
+      (S.name || 'A brand') + ' offered \u20B9' + price.toLocaleString('en-IN') + ' for ' + (draft.campaignName || 'a campaign') + '.');
+    try {
+      S.bk.oid = id; S.bk.sentOffer = true; S.bk.offerPrice = price;
+      S.bookings.unshift({ camp: draft.campaignName || '', creator: draft.creatorName || '', creatorId: String(draft.creatorId || ''), pkg: 'Custom offer', type: 'paid', deadline: draft.deadline || '', total: 0, price: 0, fee: 0, oid: id, _status: 'Pending', revs: '', revCount: 0, isCustomOffer: true, offerStatus: 'pending', offerPrice: price, reviewed: false });
+      S.bk.step = 6; sheet();
+    } catch (e) {}
+    toast('Offer sent.');
+  }).catch(function (e) {
+    var m = (e && e.message) || '';
+    if (/permission|denied/i.test(m)) toast('Could not send the offer (permission).');
+    else toast('Could not send the offer. Please try again.');
+  });
+}
+try { window.collancerSendCustomOffer = sendCustomOffer; } catch (e) {}
+
+/* Item 13 — pay for an accepted custom offer: creates a fresh paid booking
+ * through the server-side wallet lane at the agreed price, then retires the
+ * original offer booking (rule-safe: moneyless Pending/Active brand cancel). */
+function payOffer(oid, price) {
+  oid = String(oid || ''); price = Math.floor(Number(price) || 0);
+  if (!oid || !(price >= 100) || !uid) { toast('Invalid offer.'); return; }
+  toast('Preparing payment\u2026');
+  DB.collection('bookings').doc(oid).get().then(function (snap) {
+    if (!snap.exists) throw new Error('not_found');
+    var d = snap.data() || {};
+    if (String(d.bizId) !== String(uid)) throw new Error('not_yours');
+    if (!d.isCustomOffer) throw new Error('not_an_offer');
+    var bizName = 'Business';
+    try { bizName = (S.name || (bizDoc && bizDoc.bizName) || 'Business').slice(0, 120); } catch (e) {}
+    var draft = {
+      creatorId: String(d.creatorId || ''), creatorName: String(d.creatorName || 'Creator').slice(0, 120),
+      creatorHandle: String(d.creatorHandle || '').slice(0, 120),
+      creatorPlatform: String(d.creatorPlatform || '').slice(0, 60),
+      creatorNiche: String(d.creatorNiche || '').slice(0, 80),
+      creatorCity: String(d.creatorCity || '').slice(0, 80),
+      bizId: uid, bizName: bizName,
+      bizPfp: (bizDoc && bizDoc.pfp) || null, bizIsPro: bizIsPro(),
+      type: 'paid', packageKey: null,
+      campaignName: String(d.campaignName || '').slice(0, 160),
+      productName: String(d.productName || '').slice(0, 160),
+      brief: String(d.brief || '').slice(0, 4000),
+      deliverables: String(d.deliverables || '').slice(0, 2000),
+      platform: String(d.platform || '').slice(0, 60),
+      deadline: String(d.deadline || '').slice(0, 40),
+      targetAudience: String(d.targetAudience || '').slice(0, 400),
+      category: String(d.category || '').slice(0, 80),
+      hashtags: String(d.hashtags || '').slice(0, 400),
+      websiteLink: String(d.websiteLink || '').slice(0, 500),
+      cta: String(d.cta || '').slice(0, 200),
+      usageRights: String(d.usageRights || '').slice(0, 800),
+      revisions: String(d.revisions || '').slice(0, 80),
+      exclusivity: String(d.exclusivity || '').slice(0, 200),
+      requirements: String(d.requirements || '').slice(0, 2000),
+      contactNumber: String(d.contactNumber || '').slice(0, 40),
+      contact: String(d.contact || '').slice(0, 40),
+      shipping: String(d.shipping || '').slice(0, 400),
+      mediaFiles: [],
+      creatorPrice: price,
+    };
+    return sha256hex(JSON.stringify({ offerPay: oid, bizId: uid, price: price })).then(function (fp) {
+      return FB.api('book-with-wallet', { fingerprint: fp, booking: draft }).then(function (r) { return { r: r, fp: fp }; });
+    });
+  }).then(function (out) {
+    var bookingId = (out.r && out.r.bookingId) || '';
+    var charged = Number((out.r && out.r.total) || 0);
+    try { S.wallet = Math.max(0, S.wallet - charged); } catch (e) {}
+    return DB.collection('bookings').doc(oid).update({
+      status: 'Cancelled', cancelledAt: FB.serverStamp(), cancelledByBiz: true,
+      cancelReason: 'Superseded by paid booking ' + bookingId, seenByBiz: true,
+    }).catch(function () {}).then(function () { return { bookingId: bookingId, charged: charged }; });
+  }).then(function (out) {
+    toast('Payment complete. Booking is active.');
+    try { if (window.popup) window.popup({ amt: out.charged, sub: 'Paid from Collancer Wallet', oid: out.bookingId }); } catch (e) {}
+    loadBookings();
+  }).catch(function (e) {
+    var m = (e && e.message) || '';
+    if (/insufficient_balance|INSUFFICIENT/i.test(m)) toast('Insufficient wallet balance. Please add money.');
+    else if (m === 'not_yours') toast('This booking does not belong to your account.');
+    else toast('Payment failed. Please try again.');
+  });
+}
+try { window.collancerPayOffer = payOffer; } catch (e) {}
+
+/* Item 11 — in-booking chat (brand side). booking_messages rules allow the
+ * brand/creator of the booking to read + create messages. */
+var chatUnsub = null;
+function chatSub(oid) {
+  oid = String(oid || '');
+  chatClose();
+  if (!oid || !uid) return;
+  var paint = function (snap) {
+    var arr = [];
+    snap.forEach(function (doc) { var d = doc.data(); arr.push({ senderType: d.senderType || '', text: d.text || '' }); });
+    try { if (S.chat && String(S.chat.oid) === oid) { S.chat.msgs = arr; renderChat(); } } catch (e) {}
+  };
+  var q = DB.collection('booking_messages').where('bookingId', '==', oid).orderBy('createdAt', 'asc').limit(100);
+  chatUnsub = q.onSnapshot(paint, function () {
+    // orderBy may need a composite index -> fall back to unordered
+    chatUnsub = DB.collection('booking_messages').where('bookingId', '==', oid).limit(100).onSnapshot(function (snap) {
+      var arr = [];
+      snap.forEach(function (doc) { var d = doc.data(); arr.push({ senderType: d.senderType || '', text: d.text || '', at: d.createdAt }); });
+      arr.sort(function (a, b) {
+        var ta = a.at && a.at.toMillis ? a.at.toMillis() : 0, tb = b.at && b.at.toMillis ? b.at.toMillis() : 0;
+        return ta - tb;
+      });
+      try { if (S.chat && String(S.chat.oid) === oid) { S.chat.msgs = arr; renderChat(); } } catch (e) {}
+    }, function () {});
+  });
+  try { track(chatUnsub); } catch (e) {}
+}
+function chatSend(oid, text) {
+  oid = String(oid || ''); text = String(text || '').slice(0, 2000).trim();
+  if (!oid || !text || !uid) return;
+  DB.collection('booking_messages').add({
+    bookingId: oid, text: text, senderType: 'brand', senderId: uid,
+    createdAt: FB.serverStamp(),
+  }).then(function () {
+    // rule-safe chat metadata stamp on the booking
+    DB.collection('bookings').doc(oid).update({ lastMessageAt: FB.serverStamp(), lastMessageFrom: 'brand' }).catch(function () {});
+  }).catch(function () { toast('Message could not be sent.'); });
+}
+function chatClose() { if (chatUnsub) { try { chatUnsub(); } catch (e) {} chatUnsub = null; } }
+try { window.collancerChatSub = chatSub; window.collancerChatSend = chatSend; window.collancerChatClose = chatClose; } catch (e) {}
+
+/* Item 16 — review submit. The rules gate creation to brands holding a
+ * COMPLETED booking carrying this bookingId for this creator. */
+function submitReview(bookingId, creatorId, stars, text) {
+  bookingId = String(bookingId || ''); creatorId = String(creatorId || '');
+  stars = Math.max(1, Math.min(5, Math.floor(Number(stars) || 0)));
+  text = String(text || '').slice(0, 1000);
+  if (!bookingId || !creatorId || !uid) { toast('Review service is loading. Please try again.'); return; }
+  toast('Submitting review\u2026');
+  var bizName = 'Business';
+  try { bizName = (S.name || (bizDoc && bizDoc.bizName) || 'Business').slice(0, 120); } catch (e) {}
+  DB.collection('reviews').add({
+    bookingId: bookingId, creatorId: creatorId, bizId: uid, bizName: bizName,
+    stars: stars, text: text, createdAt: FB.serverStamp(),
+  }).then(function () {
+    toast('Review submitted. Thank you!');
+    try {
+      (S.bookings || []).forEach(function (k) { if (String(k.oid) === bookingId) k.reviewed = true; });
+      if (S.route === 'dashboard') render();
+    } catch (e) {}
+  }).catch(function () { toast('Could not submit the review. Only completed bookings can be reviewed.'); });
+}
+try { window.collancerSubmitReview = submitReview; } catch (e) {}
+
+function loadReviews(creatorId) {
+  creatorId = String(creatorId || '');
+  if (!creatorId || !uid) return;
+  var done = function (snap) {
+    var arr = [];
+    snap.forEach(function (doc) {
+      var d = doc.data();
+      arr.push({ stars: Math.max(1, Math.min(5, Number(d.stars) || 5)), text: d.text || '', biz: d.bizName || 'Verified booking' });
+    });
+    try { S.reviews[creatorId] = arr; if (S.route === 'profile') render(); } catch (e) {}
+  };
+  DB.collection('reviews').where('creatorId', '==', creatorId).orderBy('createdAt', 'desc').limit(10).get()
+    .then(done)
+    .catch(function () {
+      DB.collection('reviews').where('creatorId', '==', creatorId).limit(10).get().then(done).catch(function () {});
+    });
+}
+try { window.collancerLoadReviews = loadReviews; } catch (e) {}
+
+/* Hide the Rate button on bookings this brand already reviewed. */
+function markReviewed() {
+  if (!uid) return;
+  DB.collection('reviews').where('bizId', '==', uid).get().then(function (snap) {
+    var ids = {};
+    snap.forEach(function (doc) { ids[String(doc.data().bookingId || '')] = true; });
+    var changed = false;
+    try {
+      (S.bookings || []).forEach(function (k) { if (ids[String(k.oid)] && !k.reviewed) { k.reviewed = true; changed = true; } });
+      if (changed && S.route === 'dashboard') render();
+    } catch (e) {}
+  }).catch(function () {});
+}
+
+/* Item 19 — fraud signal: count this brand's own prior disputes (rule-safe:
+ * the brand can only read its own bookings). Shown in the dispute form. */
+function disputeFraud() {
+  var el = document.getElementById('dfraud');
+  if (!uid) { if (el) el.textContent = ''; return; }
+  DB.collection('bookings').where('bizId', '==', uid).where('status', '==', 'Disputed').get()
+    .then(function (snap) {
+      var n = snap.size;
+      if (el) el.textContent = n > 0
+        ? 'Fraud check: this account has opened ' + n + ' dispute' + (n === 1 ? '' : 's') + ' before. Our team reviews repeat disputes closely.'
+        : 'Fraud check: no prior disputes on this account.';
+    })
+    .catch(function () { if (el) el.textContent = ''; });
+}
+try { window.collancerDisputeFraud = disputeFraud; } catch (e) {}
 
 })();
