@@ -21,6 +21,16 @@
  *    The registry row flips 'created' -> 'credited' inside the transaction,
  *    so retried webhooks can never double-credit.
  *
+ * Pro subscriptions (paid Business Pro, Rs.999/month):
+ *  - Orders registered with purpose:'pro_subscription' are activated
+ *    SERVER-SIDE on PAYMENT_SUCCESS: businesses/{uid} gets isPro:true,
+ *    proActive:true and proSubscription{status:'active',
+ *    startedAt, expiresAt:+30d, amount, orderId}. Idempotent via the registry
+ *    row flipping 'created' -> 'pro_credited' and the deterministic ledger
+ *    id prosub_{orderId}, so retried webhooks can never double-activate.
+ *    (firestore.rules deny client writes of isPro/proActive/proSubscription —
+ *    the webhook is the only activation path.)
+ *
  * PAYMENT_SUCCESS flow:
  *  - payment_orders/{orderId} exists WITH bookingId -> already booked: ack.
  *  - payment_orders/{orderId} exists WITHOUT bookingId -> mark
@@ -35,6 +45,7 @@
 import crypto from 'crypto';
 import { getAdmin } from '../lib/firebaseAdmin.js';
 import { FieldValue } from 'firebase-admin/firestore';
+import { PRO_SUBSCRIPTION_DAYS } from '../lib/pricing.js';
 
 export const config = { api: { bodyParser: false } };
 
@@ -182,6 +193,47 @@ export default async function handler(req, res) {
         // the unclaimed flagging below so admin can follow up.
       }
 
+      // BUSINESS PRO: activate the paid subscription server-side.
+      // The order is distinguished by its purpose tag in the registry
+      // (written by /api/cashfree-order). Idempotent: the registry row flips
+      // 'created' -> 'pro_credited' inside this transaction and the ledger
+      // entry has the deterministic id prosub_{orderId}, so a retried
+      // webhook can never double-activate or double-extend.
+      if (reg && reg.purpose === 'pro_subscription') {
+        if (reg.status === 'pro_credited') return 'pro_duplicate';
+        const bizRef = bizId ? db.collection('businesses').doc(bizId) : null;
+        const bizSnap = bizRef ? await tx.get(bizRef) : null;
+        if (bizSnap && bizSnap.exists) {
+          const amount = Number(reg.amount || 0);
+          const expiresAt = new Date(now.getTime() + PRO_SUBSCRIPTION_DAYS * 24 * 3600 * 1000);
+          tx.set(bizRef, {
+            isPro: true, proActive: true,
+            proSubscription: {
+              status: 'active',
+              startedAt: now,
+              expiresAt,
+              amount,
+              orderId,
+              cfPaymentId: cfPaymentId || null,
+              activatedVia: 'cashfree_webhook',
+            },
+            updatedAt: now,
+          }, { merge: true });
+          tx.set(db.collection('walletTransactions').doc('prosub_' + orderId), {
+            bizId, orderId, type: 'pro_subscription', amount,
+            cfPaymentId: cfPaymentId || null, createdAt: now,
+            note: 'Business Pro subscription (' + PRO_SUBSCRIPTION_DAYS + ' days) via Cashfree',
+          }, { merge: true });
+          tx.set(regRef, {
+            status: 'pro_credited', cfPaymentId: cfPaymentId || null,
+            paidViaWebhook: true, activatedAt: now, updatedAt: now,
+          }, { merge: true });
+          return 'pro_activated';
+        }
+        // Cannot activate (unknown business) — fall through to the unclaimed
+        // flagging below so admin can follow up.
+      }
+
       if (regSnap.exists) {
         tx.set(regRef, {
           status: 'paid_unbooked', cfPaymentId: cfPaymentId || null,
@@ -210,9 +262,11 @@ export default async function handler(req, res) {
       return 'unclaimed';
     });
 
-    // Wallet top-up outcomes: ack only (plus a credit confirmation for the
-    // brand on first credit). No unclaimed/admin noise for top-ups.
-    if (outcome === 'topup_credited' || outcome === 'topup_duplicate' || outcome === 'booked') {
+    // Wallet top-up / Pro outcomes: ack only (plus a confirmation for the
+    // brand on first credit/activation). No unclaimed/admin noise.
+    if (outcome === 'topup_credited' || outcome === 'topup_duplicate' ||
+        outcome === 'pro_activated' || outcome === 'pro_duplicate' ||
+        outcome === 'booked') {
       if (outcome === 'topup_credited') {
         const regSnap = await db.collection('payment_orders').doc(orderId).get();
         const bizId = regSnap.exists ? (regSnap.data() || {}).uid : null;
@@ -223,6 +277,23 @@ export default async function handler(req, res) {
               title: 'Wallet credited',
               body: 'Your Collancer wallet was topped up by Rs.' +
                 Number(amount || 0).toLocaleString('en-IN') + ' via Cashfree.',
+              orderId, read: false, createdAt: FieldValue.serverTimestamp(),
+            });
+          } catch (e) {
+            console.error('[cashfree-webhook] bizNotif', String(e && e.message || e).slice(0, 160));
+          }
+        }
+      }
+      if (outcome === 'pro_activated') {
+        const regSnap = await db.collection('payment_orders').doc(orderId).get();
+        const bizId = regSnap.exists ? (regSnap.data() || {}).uid : null;
+        if (bizId) {
+          try {
+            await db.collection('bizNotifs').add({
+              bizId, type: 'pro_activated',
+              title: 'Business Pro activated',
+              body: 'Business Pro is now active for ' + PRO_SUBSCRIPTION_DAYS +
+                ' days — you get 5% off every paid booking.',
               orderId, read: false, createdAt: FieldValue.serverTimestamp(),
             });
           } catch (e) {
