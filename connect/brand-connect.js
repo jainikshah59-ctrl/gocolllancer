@@ -148,6 +148,7 @@ function init() {
   wireAuth();
   wireActions();
   initPullToRefresh();
+  maybeDeepLinkProfile();
   FB.onAuth(function (u) {
     if (!u) { teardown(); return; } // auth gate stays visible
     uid = u.uid;
@@ -218,8 +219,13 @@ function doBrandGoogle() {
     .then(function (res) {
       var u = (res && res.user) || FB.user();
       if (!u) throw new Error('no-user');
-      return ensureBusinessDoc(u, u.email || '', '', null).then(function () {
-        if (window.collancerAuthDone) window.collancerAuthDone({ email: u.email || '', biz: '' });
+      /* Sensible default: Google display name -> email prefix -> fallback.
+       * Rules require bizName (2-120 chars); passing '' left the doc at the
+       * mercy of the fallback and silently failed for short email prefixes. */
+      var em = u.email || '';
+      var bizName = ((u.displayName || '').trim() || em.split('@')[0] || 'My Business').slice(0, 120);
+      return ensureBusinessDoc(u, em, bizName, null).then(function () {
+        if (window.collancerAuthDone) window.collancerAuthDone({ email: em, biz: bizName });
       });
     })
     .catch(function (err) { toast(friendlyAuthError(err)); });
@@ -328,6 +334,11 @@ function loadCreators() {
     try {
       C.length = 0;
       arr.forEach(function (c) { C.push(c); });
+      // keep a deep-linked creator visible even if outside the top-60
+      try {
+        var dc = window._deepCreator;
+        if (dc && !C.some(function (x) { return String(x.id) === String(dc.id); })) C.push(dc);
+      } catch (e2) {}
       if (S.route === 'discover' || S.route === 'profile') render();
     } catch (e) {}
   };
@@ -350,6 +361,7 @@ function loadBookings() {
         pkg: d.packageKey || '', type: d.type || 'paid',
         deadline: d.deadline || '', total: Number(d.paidAmount || d.amount || 0),
         oid: doc.id, _status: d.status || 'Pending',
+        revs: d.revisions || '', revCount: Number(d.revisionCount || 0),
       });
     });
     try {
@@ -484,17 +496,23 @@ function wireActions() {
     _fin(m);
   };
 
-  /* Cashfree sheet pay button: real order when backend configured, demo otherwise */
-  A.ppay = function () {
+  /* Cashfree sheet pay button: real order when backend configured, demo otherwise.
+   * The button is disabled for the flight; realCashfreePay's in-flight guard
+   * additionally blocks a second order from any other entry point. */
+  A.ppay = function (t) {
     var p = S.pay;
     if (!p || !p.o) return;
-    var done = function (id) { try { origPpay(); } catch (e) {} };
+    var btnEl = (t && t.tagName === 'BUTTON') ? t : (t && t.closest ? t.closest('button') : null);
+    if (btnEl) btnEl.disabled = true;
+    var release = function () { if (btnEl) btnEl.disabled = false; };
+    var done = function (id) { release(); try { origPpay(); } catch (e) {} };
     realCashfreePay(p.o.amt, p.o.label || 'Collancer payment', function (id, env) {
       if (id === null) { done(); return; } // backend unconfigured -> original demo flow
       try {
         ppClose();
         p.o.after(id);
       } catch (e) { done(); }
+      release();
     });
   };
 
@@ -541,38 +559,25 @@ function payWithWallet(T) {
   if (!booking) { toast('Could not create booking.'); return; }
   toast('Processing wallet payment\u2026');
   sha256hex(JSON.stringify(fingerprintParts())).then(function (fp) {
-    var bookingId = 'collab_' + fp;
-    var bizRef = DB.collection('businesses').doc(uid);
-    var bookRef = DB.collection('bookings').doc(bookingId);
-    var ledgerRef = DB.collection('walletTransactions').doc('booking_' + fp);
-    return DB.runTransaction(function (tx) {
-      return tx.get(bookRef).then(function (ex) {
-        if (ex.exists && ex.data().status !== 'Cancelled') throw new Error('DUPLICATE_BOOKING');
-        return tx.get(bizRef).then(function (bs) {
-          var bal = Number((bs.data() || {}).walletBalance || 0);
-          if (bal < T.t) throw new Error('INSUFFICIENT_BALANCE');
-          tx.update(bizRef, { walletBalance: firebase.firestore.FieldValue.increment(-T.t) });
-          tx.set(bookRef, Object.assign({}, booking, { collaborationFingerprint: fp }));
-          tx.set(ledgerRef, {
-            id: 'booking_' + fp, bizId: uid, type: 'booking_deduction',
-            amount: -T.t, bookingId: bookingId, creatorId: booking.creatorId,
-            creatorName: booking.creatorName, createdAt: FB.serverStamp(),
-          });
-          return { bookingId: bookingId };
-        });
-      });
-    });
-  }).then(function (out) {
-    S.wallet = Math.max(0, S.wallet - T.t);
-    notifyCreator(booking.creatorId, out.bookingId, 'New collaboration request',
-      (booking.bizName || 'A brand') + ' booked ' + (booking.campaignName || 'a campaign') + '.');
-    uiBookingDone(out.bookingId, 'WALLET');
-    try { popup({ amt: T.t, sub: 'Paid from Collancer Wallet', oid: out.bookingId }); } catch (e) {}
+    /* Server-side wallet booking: /api/book-with-wallet debits the wallet,
+     * writes the booking + ledger row atomically, and notifies the creator.
+     * The client must NOT write businesses/{uid}.walletBalance directly
+     * (repo firestore.rules deny it -> permission-denied). Amounts are
+     * recomputed server-side; the draft is whitelisted fields only. */
+    return FB.api('book-with-wallet', { fingerprint: fp, booking: booking });
+  }).then(function (r) {
+    var bookingId = (r && r.bookingId) || '';
+    var charged = Number((r && r.total) || 0);
+    // Refresh the client-side balance display from the server-computed total.
+    // (loadBusiness's onSnapshot will also correct it when the doc updates.)
+    S.wallet = Math.max(0, S.wallet - charged);
+    uiBookingDone(bookingId, 'WALLET');
+    try { popup({ amt: charged || T.t, sub: 'Paid from Collancer Wallet', oid: bookingId }); } catch (e) {}
     loadBookings();
   }).catch(function (err) {
     var m = (err && err.message) || '';
-    if (m === 'DUPLICATE_BOOKING') toast('You already have an active request like this.');
-    else if (m === 'INSUFFICIENT_BALANCE') toast('Insufficient wallet balance. Please add money.');
+    if (/duplicate_booking|DUPLICATE/i.test(m)) toast('You already have an active request like this.');
+    else if (/insufficient_balance|INSUFFICIENT/i.test(m)) toast('Insufficient wallet balance. Please add money.');
     else if (/permission|denied/i.test(m)) toast('Wallet payments need brand access enabled.');
     else toast('Payment failed. Please try again.');
   });
@@ -588,25 +593,32 @@ function loadCashfreeSdk() {
     document.head.appendChild(s);
   });
 }
+/* In-flight guard: a double-tap on Pay must never create two real Cashfree
+ * orders (the second order_id would be lost). Set on entry, cleared exactly
+ * once via done() on every completion/error path. */
+var cashfreeInFlight = false;
 /* Real Cashfree order. cb(orderId|null, env) — null means backend unconfigured. */
 function realCashfreePay(amount, label, cb) {
+  if (cashfreeInFlight) { toast('Payment is already being processed. Please wait.'); return; }
+  cashfreeInFlight = true;
+  var done = function (orderId, env) { cashfreeInFlight = false; cb(orderId, env); };
   FB.api('cashfree-order', {
     amount: amount, purpose: label || 'Collancer payment',
     customer: { customer_id: uid, customer_email: S.email || '', customer_phone: (bizDoc && bizDoc.phone) || '' },
   }).then(function (r) {
-    if (!r || r.configured === false) { cb(null); return; }
-    if (!r.payment_session_id) { cb(null); return; }
+    if (!r || r.configured === false) { done(null); return; }
+    if (!r.payment_session_id) { done(null); return; }
     loadCashfreeSdk().then(function (Cashfree) {
       var cf = Cashfree({ mode: r.env === 'production' ? 'production' : 'sandbox' });
       return cf.checkout({ paymentSessionId: r.payment_session_id, redirectTarget: '_modal' }).then(function () {
         // expected_amount: verify the PAID order's amount matches what we charged
         return FB.api('cashfree-verify', { order_id: r.order_id, expected_amount: amount }).then(function (v) {
-          if (v && v.order_status === 'PAID' && v.amount_matches !== false) cb(r.order_id, r.env || 'test');
-          else { toast('Payment not confirmed. Please try again.'); cb(null); }
+          if (v && v.order_status === 'PAID' && v.amount_matches !== false) done(r.order_id, r.env || 'test');
+          else { toast('Payment not confirmed. Please try again.'); done(null); }
         });
       });
-    }).catch(function () { toast('Could not open payment gateway.'); cb(null); });
-  }).catch(function () { cb(null); });
+    }).catch(function () { toast('Could not open payment gateway.'); done(null); });
+  }).catch(function () { done(null); });
 }
 
 function payWithCashfreeBooking(T) {
@@ -641,7 +653,9 @@ function payWithCashfreeBooking(T) {
 /* Brand review of delivered work. Exposed as a global for the booking sheet:
  *   window.collancerReviewBooking(bookingId, 'approve')
  *   window.collancerReviewBooking(bookingId, 'revision', note)
- * Verifies the booking belongs to this brand (bizId === uid) before writing. */
+ *   window.collancerReviewBooking(bookingId, 'dispute', reason)
+ * Verifies the booking belongs to this brand (bizId === uid) before writing.
+ * All update shapes match firestore.rules exactly (rule-safe field lists). */
 function reviewBooking(bookingId, decision, note) {
   var ref = DB.collection('bookings').doc(String(bookingId || ''));
   toast('Updating booking\u2026');
@@ -651,29 +665,87 @@ function reviewBooking(bookingId, decision, note) {
     if (String(d.bizId) !== String(uid)) throw new Error('not_your_booking');
     if (d.status !== 'PendingCompletion') throw new Error('wrong_status');
     if (decision === 'approve') {
-      return ref.update({ status: 'Completed', completedAt: FB.serverStamp(), updatedAt: FB.serverStamp() });
+      // Rule-safe: BUSINESS approve allows status/approvedAt/approvedByBiz/
+      // payoutStatus/updatedAt/seenByBiz (NOT completedAt — that write is denied).
+      return ref.update({
+        status: 'Completed', approvedAt: FB.serverStamp(), approvedByBiz: true,
+        updatedAt: FB.serverStamp(), seenByBiz: true,
+      });
     }
     if (decision === 'revision') {
+      // Revision-cap enforcement: the booking's `revisions` text (e.g.
+      // "2 rounds included") sets the cap; revisionCount is tracked on every
+      // revision. No parseable number -> no cap.
+      var capM = /(\d+)/.exec(String(d.revisions || ''));
+      var cap = capM ? parseInt(capM[1], 10) : 0;
+      if (cap > 0 && Number(d.revisionCount || 0) >= cap) throw new Error('revision_limit');
       return ref.update({
         status: 'Active',
         revisionNote: String(note || '').slice(0, 1000),
         revisionCount: firebase.firestore.FieldValue.increment(1),
+        revisionRequestedAt: FB.serverStamp(),
         updatedAt: FB.serverStamp(),
+        seenByBiz: true,
+      });
+    }
+    if (decision === 'dispute') {
+      // Rule-safe: BUSINESS dispute allows status/disputeReason/
+      // disputeOpenedAt/disputeOpenedBy/updatedAt/seenByBiz.
+      return ref.update({
+        status: 'Disputed',
+        disputeReason: String(note || '').slice(0, 1000),
+        disputeOpenedAt: FB.serverStamp(),
+        disputeOpenedBy: uid,
+        updatedAt: FB.serverStamp(),
+        seenByBiz: true,
       });
     }
     throw new Error('bad_decision');
   }).then(function () {
-    toast(decision === 'approve' ? 'Booking completed. Payout queued for the creator.' : 'Revision requested. The creator has been notified.');
+    if (decision === 'approve') toast('Booking completed. The creator can now request their payout.');
+    else if (decision === 'dispute') toast('Dispute opened. Our team will review this booking.');
+    else toast('Revision requested. The creator has been notified.');
     try { loadBookings(); } catch (e) {}
   }).catch(function (e) {
     var m = (e && e.message) || '';
     if (m === 'not_your_booking') toast('This booking does not belong to your account.');
     else if (m === 'wrong_status') toast('This booking is not awaiting review.');
+    else if (m === 'revision_limit') toast('This booking has no revisions left.');
     else if (m === 'bad_decision') toast('Invalid review decision.');
     else toast('Could not update booking. Please try again.');
   });
 }
 try { window.collancerReviewBooking = reviewBooking; } catch (e) {}
+
+/* Brand cancels a booking: Pending/Active -> Cancelled.
+ * Rule-safe fields only (firestore.rules BUSINESS cancel). No refund is
+ * processed by this action — it only ends the booking lifecycle. */
+function cancelBooking(bookingId, reason) {
+  var ref = DB.collection('bookings').doc(String(bookingId || ''));
+  toast('Cancelling booking\u2026');
+  return ref.get().then(function (snap) {
+    if (!snap.exists) throw new Error('not_found');
+    var d = snap.data() || {};
+    if (String(d.bizId) !== String(uid)) throw new Error('not_your_booking');
+    if (d.status !== 'Pending' && d.status !== 'Active') throw new Error('wrong_status');
+    return ref.update({
+      status: 'Cancelled',
+      cancelledAt: FB.serverStamp(),
+      cancelledByBiz: true,
+      cancelReason: String(reason || '').slice(0, 500),
+      seenByBiz: true,
+    });
+  }).then(function () {
+    toast('Booking cancelled.');
+    try { loadBookings(); } catch (e) {}
+  }).catch(function (e) {
+    var m = (e && e.message) || '';
+    if (m === 'not_your_booking') toast('This booking does not belong to your account.');
+    else if (m === 'wrong_status') toast('Only pending or active bookings can be cancelled.');
+    else toast('Could not cancel the booking. Please try again.');
+  });
+}
+try { window.collancerCancelBooking = cancelBooking; } catch (e) {}
 
 /* ---------------- marketplace ---------------- */
 function loadMarketplace() {
@@ -749,6 +821,40 @@ function loadWalletLedger() {
         }
       } catch (e) {}
     }, function () {}));
+}
+
+/* ---------------- deep link (/c/<handle>) ---------------- */
+/* Shared creator profile links: the outer page stores the handle in
+ * sessionStorage and opens the brand app. Route straight to the public
+ * creator profile view instead of the auth gate. creators read is public. */
+function maybeDeepLinkProfile() {
+  var handle = null;
+  try { handle = sessionStorage.getItem('collancer_deep_handle'); } catch (e) {}
+  if (!handle) return;
+  try { sessionStorage.removeItem('collancer_deep_handle'); } catch (e) {}
+  DB.collection('creators').where('handleLower', '==', String(handle).toLowerCase()).limit(1).get()
+    .then(function (snap) {
+      var doc = null;
+      snap.forEach(function (d) { if (!doc) doc = d; });
+      if (!doc) { toast('Creator not found.'); return; }
+      var c = mapCreator(doc);
+      // profile() view reads demo-shaped fields plat/niche/city
+      c.plat = c._platform || 'Instagram';
+      c.niche = c._niche || '';
+      c.city = c._city || '';
+      try { window._deepCreator = c; } catch (e) {}
+      try {
+        var i = -1;
+        for (var k = 0; k < C.length; k++) { if (String(C[k].id) === String(c.id)) { i = k; break; } }
+        if (i >= 0) C[i] = c; else C.push(c);
+      } catch (e) {}
+      try {
+        var g = document.getElementById('authGate');
+        if (g) { g.style.display = 'none'; document.body.style.overflow = ''; }
+      } catch (e) {}
+      try { S.cid = c.id; S.ptab = 'Overview'; go('profile'); } catch (e) {}
+    })
+    .catch(function () { toast('Could not open this creator profile.'); });
 }
 
 /* ---------------- notifications ---------------- */
