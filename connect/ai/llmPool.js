@@ -4,7 +4,7 @@
  *
  * Architecture: client calls /api/llm (server-side proxy), which does
  * sequential failover across 3 free lanes:
- *   1. Groq Cloud API (llama-3.1-8b-instant) — 14,400 free req/day
+ *   1. Groq Cloud API (openai/gpt-oss-20b) — 14,400 free req/day
  *   2. Cloudflare Workers AI (@cf/meta/llama-3.1-8b-instruct) — 10,000 free req/day
  *   3. Google Gemini 1.5 Flash (gemini-1.5-flash) — 1,500 free req/day
  *
@@ -126,7 +126,10 @@ function extractContent(json) {
 export async function poolAnswer(question, isCreator = false) {
   const q = String(question || '').trim();
   if (!q) return null;
-  const { system, user } = buildPoolMessages(q, isCreator);
+  // The server builds the system prompt from `scope` (api/llm.js); the
+  // client-sent system prompt is intentionally ignored server-side to block
+  // prompt injection and quota burn.
+  const scope = isCreator ? 'creator' : 'brand';
 
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), LLM_TIMEOUT_MS);
@@ -134,7 +137,7 @@ export async function poolAnswer(question, isCreator = false) {
     const r = await fetch(LLM_API_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ system, user }),
+      body: JSON.stringify({ scope, user: q }),
       signal: ctrl.signal,
     });
     if (!r.ok) return null;
