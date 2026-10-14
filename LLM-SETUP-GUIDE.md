@@ -43,5 +43,5 @@
 ## How it works
 
 - `connect/ai/llmPool.js` — 3-lane pool: Groq (3500ms) → Cloudflare → Gemini → local KB fallback
-- `api/llm-keys.js` — serves keys from Vercel env vars (keys never in git)
-- Priority: `window.__COLLLANCER_LLM_KEYS__` (if set) → `/api/llm-keys` → placeholders (lanes skipped)
+- `api/llm.js` — server-side proxy for all 3 lanes (keys from Vercel env vars, never exposed to client). Note: `api/llm-keys.js` (the old key-serving endpoint) was **deleted** on 2026-10-13 — the proxy replaced it.
+- Priority: direct `/api/llm` call → local knowledge base fallback (all lanes fail)
