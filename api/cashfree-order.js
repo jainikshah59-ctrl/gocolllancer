@@ -49,6 +49,11 @@ export default async function handler(req, res) {
 
   const customer = body.customer || {};
   const orderId = 'cf_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+  // Item 2: wallet top-ups are tagged so the webhook can tell them apart from
+  // booking payments. Callers pass purpose:'wallet_topup' (+ amount); the tag
+  // is persisted in the payment_orders registry below and consumed by
+  // /api/cashfree-webhook. Other callers keep passing their label string.
+  const purpose = String(body.purpose || '').trim().slice(0, 64) || 'booking_payment';
 
   try {
     const cfRes = await fetch(base(env) + '/orders', {
@@ -69,11 +74,11 @@ export default async function handler(req, res) {
           customer_phone: String(customer.phone || '9999999999').replace(/\D/g, '').slice(-10) || '9999999999',
         },
         order_meta: {
-          return_url: body.returnUrl || 'https://collancer.in/payment/return?order_id=' + orderId,
+          return_url: body.returnUrl || 'https://gocolllancer.vercel.app/payment/return?order_id=' + orderId,
           // Server webhook for the paid-but-tab-closed case (api/cashfree-webhook).
           notify_url: body.notifyUrl || (APP_URL + '/api/cashfree-webhook'),
         },
-        order_note: String(body.purpose || 'Collancer payment').slice(0, 200),
+        order_note: String(body.note || body.label || (purpose === 'wallet_topup' ? 'Collancer wallet top-up' : (body.purpose || 'Collancer payment'))).slice(0, 200),
       }),
     });
     const data = await cfRes.json().catch(() => ({}));
@@ -90,6 +95,7 @@ export default async function handler(req, res) {
       const { FieldValue } = await import('firebase-admin/firestore');
       await getAdmin().firestore().collection('payment_orders').doc(orderId).set({
         uid, amount: Math.round(amount * 100) / 100, currency: 'INR',
+        purpose, // 'wallet_topup' tags a wallet credit; booking payments carry their label
         status: 'created', bookingId: null,
         customerEmail: String(customer.email || 'noreply@collancer.in').slice(0, 128),
         cashfreeEnv: env, createdAt: FieldValue.serverTimestamp(),
