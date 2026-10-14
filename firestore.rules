@@ -192,6 +192,19 @@ service cloud.firestore {
 
     /* ---------------- bookings ---------------- */
 
+    // C7#7: money fields are server-managed — /api/booking-create writes them
+    // via the admin SDK (bypassing rules). On client create they must be
+    // absent or equal to moneyless safe defaults (barter-style bookings carry
+    // paidAmount 0 + 'not_required' statuses). This closes the fake
+    // wallet-credit / paidAmount-forgery path at the rules layer.
+    function bookingCreateMoneySafe(d) {
+      return (!('paidAmount' in d) || d.paidAmount == 0)
+        && (!('paymentStatus' in d) || d.paymentStatus == 'not_required')
+        && (!('escrowStatus' in d) || d.escrowStatus == 'not_required')
+        && (!('paymentReference' in d) || d.paymentReference == null)
+        && (!('refundAmount' in d) || d.refundAmount == 0);
+    }
+
     match /bookings/{id} {
       allow read: if isAdmin()
         || (isAuthed() && (
@@ -206,7 +219,8 @@ service cloud.firestore {
         && docVal(request.resource.data, 'paymentApproved', false) == false
         && !('releasedAt' in request.resource.data)
         && !('releasedBy' in request.resource.data)
-        && !('adminRevenueId' in request.resource.data);
+        && !('adminRevenueId' in request.resource.data)
+        && bookingCreateMoneySafe(request.resource.data);
 
       allow update: if isAdmin()
         // CREATOR/brand mark-as-seen + chat read timestamps (no status change)
@@ -226,9 +240,19 @@ service cloud.firestore {
             .hasOnly(['status', 'acceptedAt', 'acceptedByCreator', 'seenByCreator',
               'creatorAddress', 'addressSharedAt', 'addressSharedTo']))
         // CREATOR reject: Pending -> Cancelled
+        // C6#3: refundAmount can never exceed what the brand actually paid
+        // (refundAmount <= existing paidAmount) — fails closed when
+        // paidAmount is not a number. Closes the collusion money-printing
+        // loop at the rules layer too (the cron additionally uses only
+        // server-truth paidAmount).
         || (isAuthed() && resource.data.creatorId == request.auth.uid
           && resource.data.status == 'Pending'
           && request.resource.data.status == 'Cancelled'
+          && (!('refundAmount' in request.resource.data)
+            || (request.resource.data.refundAmount is number
+              && request.resource.data.refundAmount >= 0
+              && request.resource.data.refundAmount <=
+                (resource.data.paidAmount is number ? resource.data.paidAmount : 0)))
           && request.resource.data.diff(resource.data).affectedKeys()
             .hasOnly(['status', 'rejectedAt', 'rejectedByCreator', 'rejectionReason',
               'refundProcessed', 'refundAmount', 'refundStatus', 'refundedAt', 'seenByCreator']))
@@ -304,11 +328,14 @@ service cloud.firestore {
       allow read: if isAdmin() || (isAuthed() && resource.data.creatorId == request.auth.uid);
       // B-H4: payout amount must EXACTLY equal the booking's canonical
       // creator earnings — Math.round(creatorPrice * 0.95). bookingId is
-      // required in both branches so no invented amounts pass.
+      // required in both branches so no invented amounts pass. One payout
+      // per booking: the doc id is bound to the booking so duplicate
+      // (double-submit / duped client) payout requests are denied.
       allow create: if isAuthed()
         && request.resource.data.status == 'pending'
         && request.resource.data.amount >= 100
         && request.resource.data.bookingId is string
+        && request.resource.id == 'payout_' + request.resource.data.bookingId
         && request.resource.data.amount == Math.round(payoutBookingData().creatorPrice * 0.95)
         && (request.resource.data.creatorId == request.auth.uid
           // brand may queue payout for its completed booking
