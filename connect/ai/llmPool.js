@@ -134,10 +134,19 @@ export async function poolAnswer(question, isCreator = false) {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), LLM_TIMEOUT_MS);
   try {
+    // POST /api/llm requires Firebase auth (server-side quota guard).
+    // Grab a token from the app's auth context when available; without one
+    // the server 401s and we silently fall back to the local DB below.
+    let idToken = null;
+    try {
+      if (typeof window !== 'undefined' && window.FB && typeof window.FB.idToken === 'function') {
+        idToken = await window.FB.idToken().catch(() => null);
+      }
+    } catch { /* unauthenticated — server will 401, fallback below */ }
     const r = await fetch(LLM_API_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ scope, user: q }),
+      body: JSON.stringify(idToken ? { idToken, scope, user: q } : { scope, user: q }),
       signal: ctrl.signal,
     });
     if (!r.ok) return null;
