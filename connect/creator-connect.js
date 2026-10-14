@@ -144,6 +144,23 @@ function afterLogin(u) {
   }
   loadBookings();
   loadMarket();
+  loadCreatorNotifications();
+}
+
+/* ---------------- notifications ---------------- */
+/* Mirror of the brand side's bizNotifs listener (brand-connect.js
+ * loadNotifications): toast unread creatorNotifs as they arrive.
+ * The bell icons in the creator app were decorative until now. */
+function loadCreatorNotifications() {
+  trackUnsub(DB.collection('creatorNotifs').where('creatorId', '==', uid).orderBy('createdAt', 'desc').limit(1)
+    .onSnapshot(function (snap) {
+      snap.docChanges().forEach(function (ch) {
+        if (ch.type === 'added') {
+          var d = ch.doc.data();
+          if (!d.read) toast(d.title + (d.body ? ': ' + d.body : ''));
+        }
+      });
+    }, function () {}));
 }
 
 /* ---------------- auth ---------------- */
@@ -424,8 +441,13 @@ function mapBooking(id, d) {
   };
 }
 /* Creator marks work delivered: Active -> PendingCompletion, starting the
- * 72h brand-review window. Verifies the booking belongs to this creator. */
-function deliverBooking(bookingId) {
+ * 72h brand-review window. Verifies the booking belongs to this creator.
+ * Update shape matches firestore.rules exactly (CREATOR delivery submit
+ * allows status/driveLink/promotedVideoLink/deliverySubmittedAt/
+ * completionRequestedAt/adminRejected/adminRejectionReason/reviewDeadline/
+ * seenByCreator — deliveredAt/updatedAt are NOT allowed and would be denied).
+ * deliveryUrl: optional proof-of-delivery link (post URL, Drive link...). */
+function deliverBooking(bookingId, deliveryUrl) {
   var ref = DB.collection('bookings').doc(String(bookingId || ''));
   var bizId = null;
   ref.get().then(function (snap) {
@@ -434,12 +456,15 @@ function deliverBooking(bookingId) {
     if (String(d.creatorId) !== String(uid)) throw new Error('not_your_booking');
     if (d.status !== 'Active') throw new Error('wrong_status');
     bizId = d.bizId || null;
-    return ref.update({
+    var patch = {
       status: 'PendingCompletion',
-      deliveredAt: FB.serverStamp(),
+      deliverySubmittedAt: FB.serverStamp(),
       reviewDeadline: new Date(Date.now() + 72 * 3600 * 1000),
-      updatedAt: FB.serverStamp(),
-    });
+      seenByCreator: true,
+    };
+    var url = String(deliveryUrl || '').trim().slice(0, 500);
+    if (url) patch.driveLink = url;
+    return ref.update(patch);
   }).then(function () {
     toast('Work delivered. The brand has 72 hours to review.');
     if (bizId) {
@@ -490,7 +515,7 @@ function loadBookings() {
         ref.update(patch).then(notifyBiz).catch(function () { toast('Could not update booking. Please try again.'); });
         return;
       }
-      if (action === 'deliver') { deliverBooking(booking.id); return; }
+      if (action === 'deliver') { deliverBooking(booking.id, booking.deliveryUrl); return; }
         // REJECT: atomic transaction — mark cancelled + record refund intent.
         // The refund itself is finalized by the brand wallet / admin cron
         // (see api/booking-deadlines.js); the deterministic ledger id makes
