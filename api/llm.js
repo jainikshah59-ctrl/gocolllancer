@@ -18,6 +18,10 @@
  * client-sent `scope` field. Any client-sent `system` value is IGNORED —
  * accepting client-controlled system prompts allowed prompt injection and
  * quota burn on Jainik's keys (connect/ai/llmPool.js sends scope only).
+ *
+ * SECURITY (C13): POST requires Firebase auth (verifyUid). The LLM keys are
+ * Jainik's quota and must not be an open proxy — unauthenticated callers get
+ * 401. (GET key-status is intentionally left open: it exposes booleans only.)
  */
 
 const GROQ_URL = 'https://api.groq.com/openai/v1/chat/completions';
@@ -116,13 +120,24 @@ export default async function handler(req, res) {
   const { rateLimit } = await import('../lib/rateLimit.js');
   if (!rateLimit(req, res, { max: 30, windowMs: 60000 })) return;
 
+  let body = req.body;
+  if (typeof body === 'string') {
+    try { body = JSON.parse(body); } catch { body = {}; }
+  }
+  body = body && typeof body === 'object' ? body : {};
+
+  // Firebase auth for POST — the LLM keys must not be an open proxy.
+  if (req.method === 'POST') {
+    try {
+      const { verifyUid } = await import('../lib/firebaseAdmin.js');
+      await verifyUid(body.idToken || (req.headers.authorization || '').replace(/^Bearer\s+/i, ''));
+    } catch {
+      return res.status(401).json({ provider: 'none', text: '' });
+    }
+  }
+
   try {
     if (req.method !== 'POST') return done('none', '');
-    let body = req.body;
-    if (typeof body === 'string') {
-      try { body = JSON.parse(body); } catch { body = {}; }
-    }
-    body = body && typeof body === 'object' ? body : {};
     // scope is a small whitelisted enum — the ONLY client influence on the
     // system prompt. Client-sent `system` is deliberately ignored.
     const system = systemForScope(body.scope);
