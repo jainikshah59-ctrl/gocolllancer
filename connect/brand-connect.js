@@ -289,11 +289,9 @@ function loadBusiness() {
  *  - paid subscription: proSubscription.status === 'active' && expiresAt > now
  *  - grandfathered: legacy free Pro (isPro && proActive) keeps working.
  * New Pro activations go through the "Go Pro — ₹999/month" button (A.gopro),
- * which creates a Cashfree order with purpose 'pro_subscription' and stamps
- * proSubscription on the business doc after a verified payment.
- * OPEN (hardening): move the post-payment proSubscription stamp into a
- * server-verified path (cashfree-webhook / dedicated API) instead of the
- * client write — client writes are convenient but forgeable. */
+ * which creates a Cashfree order with purpose 'pro_subscription'; the
+ * Cashfree webhook stamps proSubscription server-side after a verified
+ * payment (firestore.rules deny client writes of Pro state). */
 var PRO_SUBSCRIPTION_PRICE = 999; // ₹/month (Jainik decision 2026-10-14)
 function isProActive() {
   if (!bizDoc) return false;
@@ -475,10 +473,13 @@ function fingerprintParts() {
   };
 }
 function notifyCreator(creatorId, bookingId, title, body) {
-  return DB.collection('creatorNotifs').add({
-    creatorId: creatorId, type: 'booking_received', title: title, body: body,
-    bookingId: bookingId, read: false, createdAt: FB.serverStamp(),
-  }).catch(function () {});
+  // REMOVED (Cycle 13+14+15, Item 7): firestore.rules creatorNotifs allow
+  // create only when creatorId == the caller's own uid, so a brand writing
+  // to the creator's notification feed was 100% permission-denied (and
+  // swallowed by the .catch anyway). Notifications are server-owned now —
+  // booking-create / booking-action / book-with-wallet write them via the
+  // Admin SDK. Kept as a no-op so the existing call sites don't break.
+  return Promise.resolve(null);
 }
 function uiBookingDone(realId, methodLabel) {
   try { origFinish(methodLabel); } catch (e) {}
@@ -544,14 +545,19 @@ function wireActions() {
     if (btnEl) btnEl.disabled = true;
     var release = function () { if (btnEl) btnEl.disabled = false; };
     var done = function (id) { release(); try { origPpay(); } catch (e) {} };
-    realCashfreePay(p.o.amt, p.o.label || 'Collancer payment', function (id, env) {
+    // Wallet top-ups must reach the server with the canonical 'wallet_topup'
+    // purpose (the webhook credits walletBalance only for that tag) — derive
+    // it from the sheet label instead of passing the display label through.
+    var label = p.o.label || 'Collancer payment';
+    var purpose = /wallet[\s\-_]*top[\s\-_]*up/i.test(label) ? 'wallet_topup' : label;
+    realCashfreePay(p.o.amt, label, function (id, env) {
       if (id === null) { done(); return; } // backend unconfigured -> original demo flow
       try {
         ppClose();
         p.o.after(id);
       } catch (e) { done(); }
       release();
-    });
+    }, { purpose: purpose });
   };
 
   /* Paid-but-unsaved retry (one tap): re-call booking-create with the same
@@ -586,13 +592,15 @@ function wireActions() {
 
   /* Business Pro upgrade (Cycle 12, Item 21): paid subscription ₹999/month.
    * Creates a real Cashfree order with purpose 'pro_subscription'
-   * (realCashfreePay passes its label through as `purpose` to
-   * /api/cashfree-order, and already verifies PAID + amount server-side via
-   * /api/cashfree-verify before calling back with a non-null orderId).
-   * On verified payment, stamps proSubscription on the business doc; the 5%
-   * discount gates on isProActive() so it takes effect immediately.
-   * OPEN (hardening): stamp proSubscription server-side (cashfree-webhook /
-   * dedicated API) instead of this client write. */
+   * (realCashfreePay passes the canonical purpose to /api/cashfree-order,
+   * and already verifies PAID + amount server-side via /api/cashfree-verify
+   * before calling back with a non-null orderId).
+   * Activation happens SERVER-SIDE: the Cashfree webhook stamps
+   * proSubscription on the business doc on PAYMENT_SUCCESS (firestore.rules
+   * deny client writes of isPro/proActive/proSubscription). This handler
+   * polls the business doc until the webhook activation lands, then
+   * announces — no client write of Pro state, so it can never fail or be
+   * forged. */
   A.gopro = function (t) {
     if (isProActive()) { toast('Business Pro is already active.'); return; }
     var btnEl = (t && t.tagName === 'BUTTON') ? t : (t && t.closest ? t.closest('button') : null);
@@ -603,22 +611,24 @@ function wireActions() {
       release();
       if (!orderId) { toast('Payment not completed.'); return; } // unconfigured / cancelled / unverified
       toast('Confirming subscription…');
-      var nowMs = Date.now();
-      DB.collection('businesses').doc(uid).set({
-        isPro: true, proActive: true,
-        proSubscription: {
-          status: 'active',
-          startedAt: new Date(nowMs),
-          expiresAt: new Date(nowMs + 30 * 24 * 60 * 60 * 1000),
-          amount: PRO_SUBSCRIPTION_PRICE,
-        },
-      }, { merge: true }).then(function () {
-        toast('Business Pro activated — 5% off every paid booking.');
-        try { if (window.render) window.render(); } catch (e) {}
-      }).catch(function () {
-        toast('Payment succeeded but activation failed. Contact support with order ' + orderId + '.');
-      });
-    });
+      // Server-side activation (cashfree-webhook): watch the business doc —
+      // loadBusiness's onSnapshot refreshes bizDoc — until isProActive()
+      // flips. No client write: rules deny it, so attempting it would only
+      // mislead the user with a spurious "activation failed" toast.
+      var t0 = Date.now();
+      var iv = setInterval(function () {
+        var on = false;
+        try { on = isProActive(); } catch (e) {}
+        if (on) {
+          clearInterval(iv);
+          toast('Business Pro activated — 5% off every paid booking.');
+          try { if (window.render) window.render(); } catch (e) {}
+        } else if (Date.now() - t0 > 60000) {
+          clearInterval(iv);
+          toast('Payment received — Pro is activating. It unlocks shortly; if not, contact support with order ' + orderId + '.');
+        }
+      }, 2000);
+    }, { purpose: 'pro_subscription' });
   };
 
   /* Marketplace: persist requirement for real */
@@ -702,13 +712,22 @@ function loadCashfreeSdk() {
  * orders (the second order_id would be lost). Set on entry, cleared exactly
  * once via done() on every completion/error path. */
 var cashfreeInFlight = false;
-/* Real Cashfree order. cb(orderId|null, env) — null means backend unconfigured. */
-function realCashfreePay(amount, label, cb) {
+/* Real Cashfree order. cb(orderId|null, env) — null means backend unconfigured.
+ * extra (optional): { purpose, creatorId, creatorPrice }. The server
+ * normalizes `purpose` and recomputes the charge from the rate card for
+ * bookings (client amounts are never trusted) — creatorId + creatorPrice are
+ * required for booking orders so the server can verify and price them. */
+function realCashfreePay(amount, label, cb, extra) {
   if (cashfreeInFlight) { toast('Payment is already being processed. Please wait.'); return; }
   cashfreeInFlight = true;
   var done = function (orderId, env) { cashfreeInFlight = false; cb(orderId, env); };
+  var x = extra || {};
   FB.api('cashfree-order', {
-    amount: amount, purpose: label || 'Collancer payment',
+    amount: amount,
+    purpose: x.purpose || label || 'Collancer payment',
+    label: label || '',
+    creatorId: x.creatorId || null,
+    creatorPrice: x.creatorPrice != null ? x.creatorPrice : null,
     customer: { customer_id: uid, customer_email: S.email || '', customer_phone: (bizDoc && bizDoc.phone) || '' },
   }).then(function (r) {
     if (!r || r.configured === false) { done(null); return; }
@@ -716,8 +735,11 @@ function realCashfreePay(amount, label, cb) {
     loadCashfreeSdk().then(function (Cashfree) {
       var cf = Cashfree({ mode: r.env === 'production' ? 'production' : 'sandbox' });
       return cf.checkout({ paymentSessionId: r.payment_session_id, redirectTarget: '_modal' }).then(function () {
-        // expected_amount: verify the PAID order's amount matches what we charged
-        return FB.api('cashfree-verify', { order_id: r.order_id, expected_amount: amount }).then(function (v) {
+        // expected_amount: verify against the SERVER-COMPUTED order amount
+        // (the server ignores client amounts for bookings/Pro) so a PAID
+        // order for a different amount is rejected before anything is written.
+        var charged = (r && r.order_amount != null) ? r.order_amount : amount;
+        return FB.api('cashfree-verify', { order_id: r.order_id, expected_amount: charged }).then(function (v) {
           if (v && v.order_status === 'PAID' && v.amount_matches !== false) done(r.order_id, r.env || 'test');
           else { toast('Payment not confirmed. Please try again.'); done(null); }
         });
@@ -755,6 +777,13 @@ function hideBookingRetryModal() {
 
 function payWithCashfreeBooking(T) {
   toast('Opening secure payment\u2026');
+  // The server recomputes the booking charge from the creator's rate card
+  // (/api/cashfree-order ignores the client amount) — build the draft first
+  // so creatorId + creatorPrice travel with the order request, and abort
+  // before any money moves if the draft cannot be built.
+  var draft0 = buildBooking('cashfree', null, true, 'test');
+  if (!draft0) { toast('Could not start booking. Please try again.'); return; }
+  var extra = { purpose: 'booking_payment', creatorId: draft0.creatorId, creatorPrice: draft0.creatorPrice };
   realCashfreePay(T.t, 'Booking \u00B7 ' + ((S.bk.f && S.bk.f.campaign) || ''), function (orderId, env) {
     if (!orderId) return; // demo fallback already handled by A.ppay path
     var booking = buildBooking('cashfree', orderId, true, env || 'test');
@@ -786,7 +815,7 @@ function payWithCashfreeBooking(T) {
         else if (/amount_mismatch|amount/i.test(m)) toast('Payment amount did not match the booking total. Contact support.');
         else showBookingRetryModal(orderId, env, T.t);
       });
-  });
+  }, extra);
 }
 
 /* Brand review of delivered work. Exposed as a global for the booking sheet:
@@ -796,9 +825,22 @@ function payWithCashfreeBooking(T) {
  * evidenceUrls: optional array of evidence link strings (Item 19) — stored
  * as disputeEvidence on the booking (rules allow the key on dispute).
  * Verifies the booking belongs to this brand (bizId === uid) before writing.
- * All update shapes match firestore.rules exactly (rule-safe field lists). */
+ * All update shapes match firestore.rules exactly (rule-safe field lists).
+ * Approve is a money-moving action: it shows an explicit confirm and an
+ * in-flight guard so a double-tap can never fire two server approves. */
+var reviewInFlight = {};
 function reviewBooking(bookingId, decision, note, evidence) {
-  var ref = DB.collection('bookings').doc(String(bookingId || ''));
+  bookingId = String(bookingId || '');
+  var key = bookingId + ':' + String(decision || '');
+  if (reviewInFlight[key]) { toast('This action is already being processed.'); return undefined; }
+  if (decision === 'approve') {
+    var ok = false;
+    try { ok = confirm('Approve this work? This completes the booking and the creator can then request their payout.'); } catch (e) {}
+    if (!ok) return undefined;
+  }
+  reviewInFlight[key] = true;
+  var release = function () { try { delete reviewInFlight[key]; } catch (e) {} };
+  var ref = DB.collection('bookings').doc(bookingId);
   toast('Updating booking\u2026');
   return ref.get().then(function (snap) {
     if (!snap.exists) throw new Error('not_found');
@@ -864,13 +906,36 @@ function reviewBooking(bookingId, decision, note, evidence) {
     else if (m === 'revision_limit') toast('This booking has no revisions left.');
     else if (m === 'bad_decision') toast('Invalid review decision.');
     else toast('Could not update booking. Please try again.');
-  });
+  }).then(function () { release(); }, function () { release(); });
 }
 try { window.collancerReviewBooking = reviewBooking; } catch (e) {}
 
 /* Brand cancels a booking: Pending/Active -> Cancelled.
- * Rule-safe fields only (firestore.rules BUSINESS cancel). No refund is
- * processed by this action — it only ends the booking lifecycle. */
+ * Item 24 (brand-cancel refund policy): attaches the refund INTENT to the
+ * booking doc (rule-safe fields only — firestore.rules BUSINESS cancel).
+ *   Pending -> Cancelled : refundRequested=true, refundAmount=paidAmount (full)
+ *   Active  -> Cancelled : refundRequested=true, refundAmount=paidAmount-platformFee
+ * Barter/legacy bookings (no numeric paidAmount) cancel without refund fields.
+ * The refund cron executes the actual wallet credit server-side and never
+ * trusts these client-set fields — it uses server-truth paidAmount/platformFee.
+ * For Active cancels it also queues the 10% creator kill-fee from the
+ * retained fee portion (Cycle 13+14+15). */
+function cancelRefundFields(d) {
+  // Mirror firestore.rules exactly: the refund branch requires paidAmount to
+  // be a NUMBER on the existing doc (brandCancelRefundOk). A legacy string
+  // paidAmount falls through to the barter branch (cancel without refund).
+  if (typeof d.paidAmount !== 'number' || !(d.paidAmount > 0) || d.barter === true) return null;
+  var paid = d.paidAmount;
+  var fee = (typeof d.platformFee === 'number' ? d.platformFee : 0);
+  // Pending -> FULL refund; Active -> refund minus the platform fee.
+  var refund = d.status === 'Pending' ? paid : paid - fee;
+  if (!(isFinite(refund) && refund >= 0)) return null;
+  return {
+    refundRequested: true,
+    refundAmount: refund,
+    refundStatus: 'pending',
+  };
+}
 function cancelBooking(bookingId, reason) {
   var ref = DB.collection('bookings').doc(String(bookingId || ''));
   toast('Cancelling booking\u2026');
@@ -879,13 +944,22 @@ function cancelBooking(bookingId, reason) {
     var d = snap.data() || {};
     if (String(d.bizId) !== String(uid)) throw new Error('not_your_booking');
     if (d.status !== 'Pending' && d.status !== 'Active') throw new Error('wrong_status');
-    return ref.update({
+    var patch = {
       status: 'Cancelled',
+      statusBeforeCancel: d.status, // Cycle 13+14+15: lets the refund cron apply the Active-cancel kill-fee
       cancelledAt: FB.serverStamp(),
       cancelledByBiz: true,
       cancelReason: String(reason || '').slice(0, 500),
       seenByBiz: true,
-    });
+    };
+    var rf = cancelRefundFields(d);
+    if (rf) {
+      patch.refundRequested = rf.refundRequested; patch.refundAmount = rf.refundAmount; patch.refundStatus = rf.refundStatus;
+      // Cycle 13+14+15: the cron uses statusBeforeCancel to tell an Active
+      // cancel (partial refund + creator kill-fee) from a Pending one.
+      if (d.status === 'Active') patch.statusBeforeCancel = 'Active';
+    }
+    return ref.update(patch);
   }).then(function () {
     toast('Booking cancelled.');
     try { loadBookings(); } catch (e) {}
@@ -897,6 +971,43 @@ function cancelBooking(bookingId, reason) {
   });
 }
 try { window.collancerCancelBooking = cancelBooking; } catch (e) {}
+
+/* Cancel dialog with exact refund math (Item 24 copy): reads the booking to
+ * show the precise refund before the brand confirms. Falls back to a generic
+ * confirm when the booking cannot be read. Native confirm/prompt follow the
+ * existing dialog pattern. */
+function cancelBookingDialog(bookingId) {
+  var id = String(bookingId || '');
+  var proceed = function () {
+    var rs = '';
+    try { rs = prompt('Reason for cancellation (optional)', '') || ''; } catch (e) {}
+    if (window.collancerCancelBooking) window.collancerCancelBooking(id, rs);
+    else toast('Cancel service is loading. Please try again.');
+  };
+  var ask = function (msg) {
+    var ok = false;
+    try { ok = confirm(msg); } catch (e) {}
+    if (ok) proceed();
+  };
+  DB.collection('bookings').doc(id).get().then(function (snap) {
+    if (!snap.exists) { toast('Booking not found.'); return; }
+    var d = snap.data() || {};
+    if (d.status !== 'Pending' && d.status !== 'Active') {
+      toast('Only pending or active bookings can be cancelled.');
+      return;
+    }
+    var rf = cancelRefundFields(d);
+    if (rf) {
+      var fee = Math.max(0, Number(d.paidAmount || 0) - rf.refundAmount);
+      ask(d.status === 'Pending'
+        ? 'Cancel this booking?\n\nYou will be refunded ' + inr(rf.refundAmount) + ' (full amount).'
+        : 'Cancel this booking?\n\nYou will be refunded ' + inr(rf.refundAmount) + ' (' + inr(fee) + ' platform fee retained).');
+    } else {
+      ask('Cancel this booking?\n\nNo payment to refund (barter or unpaid booking).');
+    }
+  }).catch(function () { ask('Cancel this booking?'); });
+}
+try { window.collancerCancelBookingDialog = cancelBookingDialog; } catch (e) {}
 
 /* ---------------- marketplace ---------------- */
 function loadMarketplace() {
