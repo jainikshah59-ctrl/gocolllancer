@@ -101,6 +101,7 @@ function init() {
   FB = window.FB; DB = FB.db;
   wireEvents();
   initPullToRefresh();
+  initMoneyLangToggle();
   FB.onAuth(function (u) {
     if (!u) { teardown(); try { Collancer.go('login'); } catch (e) {} return; }
     uid = u.uid;
@@ -144,7 +145,9 @@ function afterLogin(u) {
   }
   loadBookings();
   loadMarket();
+  loadPortfolio();
   loadCreatorNotifications();
+  try { window.CollancerToast = toast; } catch (e) {}
 }
 
 /* ---------------- notifications ---------------- */
@@ -227,6 +230,33 @@ function doGoogle() {
       });
     })
     .catch(function (err) { if (note) note.textContent = friendlyAuthError(err); });
+}
+
+/* Money-screen EN/Hindi toggle on the creator Earnings screen. The label
+ * switching + localStorage persistence live in index.html (moneyLang /
+ * applyMoneyLang, shared); this only places the toggle button. */
+function initMoneyLangToggle() {
+  try {
+    var bh = document.querySelector('#s-earnings .bh');
+    if (!bh || bh.querySelector('[data-langtoggle]')) return;
+    var b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'tag glass';
+    b.setAttribute('data-langtoggle', '');
+    b.style.cssText = 'position:absolute;right:18px;top:calc(18px + env(safe-area-inset-top,0px));height:32px;font-size:12.5px;font-weight:800;cursor:pointer;flex:none';
+    b.setAttribute('aria-label', 'Switch money-screen language');
+    b.textContent = (window.moneyLang && window.moneyLang() === 'hi') ? 'हिं · EN' : 'EN · हिं';
+    /* The creator app has no global data-a dispatcher, so wire directly. */
+    b.addEventListener('click', function () {
+      try {
+        var nl = (window.moneyLang && window.moneyLang() === 'hi') ? 'en' : 'hi';
+        if (window.setMoneyLang) window.setMoneyLang(nl);
+        if (window.applyMoneyLang) window.applyMoneyLang();
+      } catch (e) {}
+    });
+    bh.appendChild(b);
+    if (window.applyMoneyLang) window.applyMoneyLang();
+  } catch (e) {}
 }
 
 /* ---------------- pull to refresh ---------------- */
@@ -382,6 +412,34 @@ function paintProfile() {
         igBtn.style.opacity = '';
       }
     }
+    /* No package prices set -> nudge the creator once per session, and show
+     * a persistent banner on the Rate card ("Your packages") section until
+     * prices are set. Brands cannot book a creator with no prices. */
+    var hasPrices = !!(d.prices && Object.keys(d.prices).length) || !!(d.packages && d.packages.length);
+    if (!hasPrices) {
+      if (!window._cconPriceNudge) {
+        window._cconPriceNudge = true;
+        setTimeout(function () { toast('Set your package prices to get bookings.'); }, 1200);
+      }
+      try {
+        var h2s = root.querySelectorAll('h2'), pkgCard = null;
+        h2s.forEach(function (h) { if (h.textContent.trim() === 'Your packages') pkgCard = h.closest('.glass.card'); });
+        if (pkgCard && !pkgCard.querySelector('#ccon-price-banner')) {
+          var banner = document.createElement('div');
+          banner.id = 'ccon-price-banner';
+          banner.setAttribute('role', 'note');
+          banner.style.cssText = 'margin:10px 0 0;padding:12px 14px;border-radius:16px;background:#fff7e6;border:1px solid #f2c979;font-size:13.5px;font-weight:700;color:#8a5a00;line-height:1.45';
+          banner.textContent = 'Set your package prices to get bookings. Brands see "Custom rates" on your profile until you do.';
+          var sub = pkgCard.querySelector('.sub');
+          pkgCard.insertBefore(banner, sub ? sub.nextSibling : pkgCard.firstChild);
+        }
+      } catch (e2) {}
+    } else {
+      try {
+        var old = root.querySelector('#ccon-price-banner');
+        if (old) old.parentNode.removeChild(old);
+      } catch (e3) {}
+    }
   } catch (e) { /* paint is best-effort */ }
 }
 function profileCompleteness() {
@@ -433,6 +491,9 @@ function mapBooking(id, d) {
     revisions: d.revisions || '', exclusivity: d.exclusivity || '',
     other: d.requirements || '', contact: d.contact || '',
     shipping: d.shipping || '', media: d.mediaFiles || [],
+    revisionNote: d.revisionNote || '', revisionCount: Number(d.revisionCount || 0),
+    isCustomOffer: !!d.isCustomOffer, offerStatus: d.offerStatus || '',
+    offerPrice: Number(d.offerPrice || 0), bizVerified: !!d.bizVerified,
     received: (function () {
       try { return (d.createdAt && d.createdAt.toDate ? d.createdAt.toDate() : new Date(d.createdAt)).toISOString(); }
       catch (e) { return new Date().toISOString(); }
@@ -515,11 +576,32 @@ function loadBookings() {
         ref.update(patch).then(notifyBiz).catch(function () { toast('Could not update booking. Please try again.'); });
         return;
       }
+      // Item 13: accepting a custom offer uses the same rule-safe
+      // Pending -> Active shape as a normal accept; the agreed price is the
+      // booking's offerPrice. The brand collects payment via collancerPayOffer.
+      if (action === 'acceptOffer') {
+        var opatch = { status: 'Active', acceptedAt: FB.serverStamp(), acceptedByCreator: true, seenByCreator: true };
+        ref.update(opatch).then(function () {
+          try { sendChatMessage(booking.id, 'Accepted your custom offer of \u20B9' + Number(booking.offerPrice || 0).toLocaleString('en-IN') + '.'); } catch (e) {}
+          if (booking._bizId) {
+            DB.collection('bizNotifs').add({
+              bizId: booking._bizId, type: 'offer_accepted',
+              title: 'Custom offer accepted',
+              body: (creatorDoc && creatorDoc.name ? creatorDoc.name : 'Creator') + ' accepted your custom offer.',
+              bookingId: booking.id, read: false, createdAt: FB.serverStamp(),
+            }).catch(function () {});
+          }
+        }).catch(function () { toast('Could not update booking. Please try again.'); });
+        return;
+      }
       if (action === 'deliver') { deliverBooking(booking.id, booking.deliveryUrl); return; }
-        // REJECT: atomic transaction — mark cancelled + record refund intent.
-        // The refund itself is finalized by the brand wallet / admin cron
-        // (see api/booking-deadlines.js); the deterministic ledger id makes
-        // retries idempotent.
+        // REJECT: mark cancelled + attach the refund INTENT on the booking
+        // doc only. The creator can never write walletTransactions rows
+        // (the ledger is server-only: firestore.rules deny ALL client ledger
+        // creates, and a creator writing the brand's bizId was a rule
+        // violation anyway). The actual wallet credit + ledger entry are
+        // written server-side by the cron (api/booking-deadlines.js section
+        // 1b), idempotent on the deterministic refund_{bookingId} doc id.
         DB.runTransaction(function (tx) {
           return tx.get(ref).then(function (snap) {
             var d = snap.data() || {};
@@ -531,14 +613,9 @@ function loadBookings() {
             var p = { status: 'Cancelled', rejectedAt: FB.serverStamp(), rejectedByCreator: true, seenByCreator: true };
             if (refundable) {
               p.refundProcessed = false;
+              p.refundRequested = true;
               p.refundAmount = amt;
               p.refundStatus = 'pending';
-              var ledgerRef = DB.collection('walletTransactions').doc('refund_' + booking.id);
-              tx.set(ledgerRef, {
-                bizId: d.bizId || '', bookingId: booking.id, type: 'refund',
-                amount: amt, createdAt: FB.serverStamp(),
-                note: 'Refund pending: creator declined booking',
-              }, { merge: true });
             }
             tx.update(ref, p);
           });
@@ -613,16 +690,77 @@ function paintPayoutHistory() {
       wrap.innerHTML = html;
     }).catch(function () {});
 }
-function requestPayout() {
+/* Canonical payout request (1d — matches the firestore.rules payoutRequests
+ * create rule exactly): one payout per booking, deterministic doc id
+ * `payout_{bookingId}`, amount EXACTLY Math.round(creatorPrice * 0.95),
+ * bookingId + creatorId + status 'pending'. The amount is never typed in by
+ * the creator — it is computed from the completed booking, so the rule's
+ * exact-equality check always passes. */
+function eligiblePayoutBookings() {
+  // Completed bookings with no payout doc yet (server auto-release or a
+  // previous request covers the rest).
+  return DB.collection('bookings').where('creatorId', '==', uid).get().then(function (snap) {
+    var done = {};
+    return DB.collection('payoutRequests').where('creatorId', '==', uid).get().then(function (ps) {
+      ps.forEach(function (d) {
+        var b = d.data() || {};
+        if (b.bookingId) done[b.bookingId] = true;
+      });
+      var arr = [];
+      snap.forEach(function (d) {
+        var b = d.data() || {};
+        if (b.status !== 'Completed' || done[d.id]) return;
+        var share = Math.round(Number(b.creatorPrice || 0) * 0.95);
+        if (share < 100) return; // the rule requires amount >= 100
+        arr.push({
+          id: d.id, creatorPrice: Number(b.creatorPrice || 0), amount: share,
+          campaign: b.campaignName || '', biz: b.bizName || '',
+        });
+      });
+      return arr;
+    });
+  });
+}
+function renderPayoutPicker(list) {
+  var root = $('#s-earnings');
+  var wrap = $('#ccon-payout-pick', root);
+  if (!wrap) {
+    wrap = document.createElement('div');
+    wrap.id = 'ccon-payout-pick';
+    var pz = $('#pz', root);
+    if (pz && pz.parentNode) pz.parentNode.insertBefore(wrap, pz);
+    else root.appendChild(wrap);
+  }
+  wrap.innerHTML = '<div style="font-size:13px;font-weight:800;margin:10px 0 6px">Choose a completed booking to withdraw its payout:</div>' +
+    list.map(function (b, i) {
+      return '<div class="glass card" style="margin-top:8px"><div style="display:flex;justify-content:space-between;align-items:center;gap:10px">' +
+        '<div><div style="font-size:15px;font-weight:800">' + inr(b.amount) + '</div>' +
+        '<div style="font-size:12px;color:#55616d;margin-top:2px">' + esc(b.campaign || 'Collaboration') +
+        (b.biz ? ' \u00B7 ' + esc(b.biz) : '') + '</div></div>' +
+        '<button class="black" data-pick="' + i + '" style="min-width:96px;height:42px;border-radius:21px">Request</button>' +
+        '</div></div>';
+    }).join('');
+  $all('[data-pick]', wrap).forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      var b = list[+btn.getAttribute('data-pick')];
+      if (!b) return;
+      root._payoutPick = b;
+      try { wrap.innerHTML = ''; } catch (e) {}
+      continuePayout(b);
+    });
+  });
+}
+function continuePayout(b) {
   var root = $('#s-earnings');
   var amtEl = $('#amt', root), erEl = $('#er', root);
-  var amt = parseInt((amtEl.value || '').replace(/\D/g, ''), 10) || 0;
-  var avail = root._avail || 0;
+  if (!b || !b.id) { erEl.textContent = 'No completed booking selected.'; return; }
+  // Canonical amount: the rule demands EXACT Math.round(creatorPrice * 0.95).
+  var amt = Math.round(Number(b.creatorPrice || 0) * 0.95);
+  if (!(amt >= 100)) { erEl.textContent = 'This booking has no withdrawable payout.'; return; }
+  if (amtEl) amtEl.value = String(amt); // display the canonical amount
   var meth = 'upi';
   var mtOn = root.querySelector('#mt .on');
   if (mtOn) meth = mtOn.dataset.m || 'upi';
-  if (!amt || amt < 100) { erEl.textContent = 'Enter an amount (min \u20B9100).'; return; }
-  if (amt > avail) { erEl.textContent = 'Amount is more than your available balance (' + inr(avail) + ').'; return; }
   var dest = {}, ok = false;
   if (meth === 'upi') {
     var upi = ($('#upi', root).value || '').trim();
@@ -638,17 +776,36 @@ function requestPayout() {
     dest = { method: 'bank', holder: hn, account: an, ifsc: ifs };
   }
   erEl.textContent = 'Submitting payout request\u2026';
-  DB.collection('payoutRequests').add({
-    creatorId: uid, amount: amt, status: 'pending',
+  // Rule-safe shape: deterministic id payout_{bookingId}, exact canonical
+  // amount, bookingId + creatorId + status pending.
+  DB.collection('payoutRequests').doc('payout_' + b.id).set({
+    creatorId: uid, bookingId: b.id, amount: amt, status: 'pending',
     method: dest.method, upi: dest.upi || '', holder: dest.holder || '',
     account: dest.account || '', ifsc: dest.ifsc || '',
     createdAt: FB.serverStamp(),
-  }).then(function () {
+  }, { merge: true }).then(function () {
     erEl.textContent = '';
-    amtEl.value = '';
+    if (amtEl) amtEl.value = '';
+    root._payoutPick = null;
     toast('Payout request submitted.');
     paintEarnings();
   }).catch(function () { erEl.textContent = 'Could not submit. Please try again.'; });
+}
+function requestPayout() {
+  var root = $('#s-earnings');
+  var erEl = $('#er', root);
+  if (root._payoutPick && root._payoutPick.id) { continuePayout(root._payoutPick); return; }
+  erEl.textContent = 'Finding completed bookings\u2026';
+  eligiblePayoutBookings().then(function (list) {
+    if (!list.length) { erEl.textContent = 'No completed bookings are awaiting payout.'; return; }
+    if (list.length === 1) {
+      root._payoutPick = list[0];
+      continuePayout(list[0]);
+      return;
+    }
+    erEl.textContent = '';
+    renderPayoutPicker(list);
+  }).catch(function () { erEl.textContent = 'Could not load bookings. Please try again.'; });
 }
 
 /* ---------------- market (requirements + proposals) ---------------- */
@@ -928,5 +1085,159 @@ function toolsChat() {
     });
   }).catch(function () {});
 }
+
+/* ---------------- Cycle 12 Worker D: in-booking chat + portfolio ---------------- */
+
+/* Item 11 — in-booking chat (creator side). booking_messages rules allow the
+ * brand/creator of the booking to read + create messages. The overlay is
+ * built inside the creator iframe; the booking template calls
+ * window.CollancerChat.open(id, booking) via data-a="chat". */
+var ccUnsub = null, ccBookingId = null, ccBooking = null;
+function escHtml(t) {
+  return String(t == null ? '' : t).replace(/[&<>"]/g, function (c) {
+    return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c];
+  }).replace(/\n/g, '<br>');
+}
+function sendChatMessage(bookingId, text) {
+  bookingId = String(bookingId || ''); text = String(text || '').slice(0, 2000).trim();
+  if (!bookingId || !text || !uid) return Promise.reject(new Error('bad_message'));
+  return DB.collection('booking_messages').add({
+    bookingId: bookingId, text: text, senderType: 'creator', senderId: uid,
+    createdAt: FB.serverStamp(),
+  }).then(function () {
+    // rule-safe chat metadata stamp on the booking
+    DB.collection('bookings').doc(bookingId).update({ lastMessageAt: FB.serverStamp(), lastMessageFrom: 'creator' }).catch(function () {});
+  });
+}
+function ccMsgHTML(m) {
+  var mine = m.senderType === 'creator', t = String(m.text || ''), price = 0, isCounter = false;
+  try { var o = JSON.parse(t); if (o && o.kind === 'counter_offer') { isCounter = true; price = Math.floor(+o.price || 0); } } catch (e) {}
+  if (isCounter) {
+    var pl = '\u20B9' + price.toLocaleString('en-IN');
+    var inner = '<div style="font-size:14px;font-weight:800;color:#0e7490">' + (mine ? 'You countered' : 'Brand countered') + ': ' + pl + '</div>';
+    if (!mine) inner += '<div style="margin-top:8px"><button type="button" class="black" data-cc="acceptCounter" style="width:100%;height:42px;border-radius:21px;font-size:14px">Accept ' + pl + '</button></div><div class="hint" style="margin-top:6px">Accepting starts the booking \u2014 the brand then completes payment.</div>';
+    else inner += '<div class="hint" style="margin-top:4px">Waiting for the brand to respond.</div>';
+    return '<div class="cc-msg them" style="max-width:94%">' + inner + '</div>';
+  }
+  return '<div class="cc-msg ' + (mine ? 'me' : 'them') + '">' + (mine ? '' : '<small>Brand</small>') + escHtml(t) + '</div>';
+}
+function ccPaint(snap) {
+  var box = document.getElementById('cc-msgs');
+  if (!box) return;
+  var arr = [];
+  snap.forEach(function (doc) { var d = doc.data(); arr.push({ senderType: d.senderType || '', text: d.text || '', at: d.createdAt }); });
+  arr.sort(function (a, b) {
+    var ta = a.at && a.at.toMillis ? a.at.toMillis() : 0, tb = b.at && b.at.toMillis ? b.at.toMillis() : 0;
+    return ta - tb;
+  });
+  box.innerHTML = arr.length ? arr.map(ccMsgHTML).join('') : '<div class="hint" style="text-align:center">No messages yet. Say hello to the brand.</div>';
+  box.scrollTop = box.scrollHeight;
+}
+function closeChat() {
+  var ov = document.getElementById('cc-chat');
+  if (ov) ov.classList.remove('on');
+  if (ccUnsub) { try { ccUnsub(); } catch (e) {} ccUnsub = null; }
+  ccBookingId = null; ccBooking = null;
+}
+function openChat(bookingId, booking) {
+  bookingId = String(bookingId || '');
+  if (!bookingId || !uid) return;
+  closeChat();
+  ccBookingId = bookingId; ccBooking = booking || null;
+  var root = document.getElementById('s-bookings');
+  if (!root) return;
+  var ov = document.getElementById('cc-chat');
+  if (!ov) {
+    ov = document.createElement('div');
+    ov.id = 'cc-chat';
+    ov.innerHTML = '<div class="cc-dim" id="cc-dim"></div>' +
+      '<div class="glass cc-box"><div class="cc-head">' +
+      '<div class="glass circ" id="cc-back" role="button" aria-label="Back" style="width:42px;height:42px;flex:none"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><use href="#back"/></svg></div>' +
+      '<div style="flex:1;min-width:0"><div style="font-size:17px;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" id="cc-title">Messages</div><div style="font-size:12px;color:#55616d">Chat with the brand</div></div></div>' +
+      '<div class="cc-msgs" id="cc-msgs"></div>' +
+      '<div class="cc-inrow"><div class="f ft" style="flex:1"><input id="cc-in" placeholder="Type a message..." maxlength="2000" autocomplete="off"></div>' +
+      '<button type="button" class="black" id="cc-send" style="width:50px;height:50px;border-radius:50%;flex:none;padding:0" aria-label="Send"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true" style="stroke:#fff;width:20px;height:20px"><use href="#send"/></svg></button></div></div>';
+    var st = document.createElement('style');
+    st.textContent = '#cc-chat{position:absolute;inset:0;z-index:60;display:none}#cc-chat.on{display:block}.cc-dim{position:absolute;inset:0;background:rgba(255,255,255,.55);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px)}.cc-box{position:absolute;left:8px;right:8px;bottom:8px;top:64px;border-radius:36px;display:flex;flex-direction:column;overflow:hidden;padding:14px 16px 16px}.cc-box>*{position:relative;z-index:1}.cc-head{display:flex;align-items:center;gap:10px;margin-bottom:8px}.cc-msgs{flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:8px;padding:6px 2px}.cc-inrow{display:flex;gap:8px;align-items:center;margin-top:8px}.cc-msg{max-width:84%;padding:10px 14px;font-size:14.5px;line-height:1.4;word-break:break-word;position:relative;z-index:1}.cc-msg.me{align-self:flex-end;color:#fff;background:linear-gradient(180deg,#3a3d44 0,#16181c 46%,#000 100%);box-shadow:0 0 0 1px rgba(255,255,255,.5),0 8px 14px -8px rgba(0,0,0,.5);border-radius:20px 20px 6px 20px}.cc-msg.them{align-self:flex-start;background:rgba(255,255,255,.85);box-shadow:0 0 0 1px rgba(15,40,60,.1);border-radius:20px 20px 20px 6px}.cc-msg small{display:block;font-size:11px;opacity:.65;margin-bottom:2px}';
+    document.head.appendChild(st);
+    ov.querySelector('#cc-back').addEventListener('click', closeChat);
+    ov.querySelector('#cc-dim').addEventListener('click', closeChat);
+    var send = function () {
+      var inp = document.getElementById('cc-in');
+      if (!inp || !ccBookingId) return;
+      var t = inp.value.trim();
+      if (!t) return;
+      inp.value = '';
+      sendChatMessage(ccBookingId, t).catch(function () { toast('Message could not be sent.'); });
+    };
+    ov.querySelector('#cc-send').addEventListener('click', send);
+    ov.querySelector('#cc-in').addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); send(); } });
+    ov.querySelector('#cc-msgs').addEventListener('click', function (e) {
+      var b = e.target.closest('[data-cc="acceptCounter"]');
+      if (b) ccAcceptCounter();
+    });
+    root.appendChild(ov);
+  }
+  try {
+    var ttl = document.getElementById('cc-title');
+    if (ttl) ttl.textContent = (booking && booking.campaign) || 'Messages';
+  } catch (e) {}
+  ov.classList.add('on');
+  var msgs = document.getElementById('cc-msgs');
+  if (msgs) msgs.innerHTML = '<div class="hint" style="text-align:center">Loading messages\u2026</div>';
+  ccUnsub = DB.collection('booking_messages').where('bookingId', '==', bookingId).limit(100).onSnapshot(ccPaint, function () {});
+  var inp = document.getElementById('cc-in');
+  if (inp) setTimeout(function () { try { inp.focus(); } catch (e) {} }, 250);
+}
+function ccAcceptCounter() {
+  if (!ccBooking || !ccBooking.id) return;
+  var ref = DB.collection('bookings').doc(String(ccBooking.id));
+  ref.update({ status: 'Active', acceptedAt: FB.serverStamp(), acceptedByCreator: true, seenByCreator: true })
+    .then(function () {
+      try { sendChatMessage(ccBooking.id, 'Accepted.'); } catch (e) {}
+      closeChat();
+      toast('Booking accepted. The brand will complete payment.');
+    })
+    .catch(function () { toast('Could not update booking. Please try again.'); });
+}
+function sendCounter(bookingId, price) {
+  price = Math.floor(Number(price) || 0);
+  if (!(price >= 100)) { toast('Enter at least \u20B9100.'); return Promise.reject(new Error('bad_price')); }
+  return sendChatMessage(bookingId, JSON.stringify({ kind: 'counter_offer', price: price }));
+}
+try {
+  window.CollancerChat = { open: openChat, close: closeChat, send: sendChatMessage, sendCounter: sendCounter, acceptCounter: ccAcceptCounter };
+} catch (e) {}
+
+/* Item 12 — creator portfolio: pin up to 6 post URLs on
+ * creators/{uid}.portfolioMediaIds (owner-writable per firestore.rules). */
+function loadPortfolio() {
+  if (!uid) return;
+  DB.collection('creators').doc(uid).get().then(function (snap) {
+    var d = (snap.exists && snap.data()) || {};
+    var arr = Array.isArray(d.portfolioMediaIds)
+      ? d.portfolioMediaIds.filter(function (u) { return typeof u === 'string' && u; }).slice(0, 6)
+      : [];
+    try {
+      window.CollancerPortfolio = {
+        list: arr,
+        save: function (urls) {
+          var clean = (Array.isArray(urls) ? urls : [])
+            .filter(function (u) { return typeof u === 'string' && /^https?:\/\//i.test(u.trim()); })
+            .map(function (u) { return u.trim().slice(0, 500); })
+            .slice(0, 6);
+          return DB.collection('creators').doc(uid).update({ portfolioMediaIds: clean }).then(function () {
+            window.CollancerPortfolio.list = clean;
+            try { if (typeof window.CollancerPortfolio.onChange === 'function') window.CollancerPortfolio.onChange(); } catch (e) {}
+          });
+        },
+        onChange: null,
+      };
+      var f = window.__pfRender;
+      if (typeof f === 'function') { window.CollancerPortfolio.onChange = f; f(); }
+    } catch (e) {}
+  }).catch(function () {});
+}
+
 
 })();
