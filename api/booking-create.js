@@ -16,8 +16,12 @@
  *      5% Pro discount off the creator price first (brand isPro read
  *      server-side from businesses/{uid}), then 12% fee on the discounted
  *      price. Reject if |order_amount - expectedTotal| > 1.
- *  (d) order registry payment_orders/{orderId}: 409 REUSE if it exists;
- *      otherwise create it + the booking doc atomically in one transaction.
+ *  (d) order registry payment_orders/{orderId}: 409 REUSE only if the row
+ *      was already consumed for a booking ('booked'/'consumed' or it carries
+ *      a bookingId). /api/cashfree-order pre-registers every order with
+ *      status 'created' — that row is CONSUMED here (flipped to 'booked'
+ *      with the bookingId) instead of 409ing. A row tagged
+ *      purpose:'wallet_topup' can never fund a booking (rejected).
  */
 import { getAdmin, verifyUid, readBody } from '../lib/firebaseAdmin.js';
 import { FieldValue } from 'firebase-admin/firestore';
@@ -176,9 +180,23 @@ export default async function handler(req, res) {
       const regRef = db.collection('payment_orders').doc(orderId);
       const regSnap = await tx.get(regRef);
       if (regSnap.exists) {
-        const e = new Error('This payment was already used for a booking.');
-        e.code = 'ORDER_REUSED';
-        throw e;
+        // 1a: /api/cashfree-order pre-registers every order with status
+        // 'created'. CONSUME that row (it becomes 'booked' with the bookingId
+        // in the tx.set below) instead of 409ing — the order was paid but
+        // never used. Only 409 when the order was already consumed.
+        const regData = regSnap.data() || {};
+        const regStatus = String(regData.status || '');
+        if (regStatus === 'booked' || regStatus === 'consumed' || regData.bookingId) {
+          const e = new Error('This payment was already used for a booking.');
+          e.code = 'ORDER_REUSED';
+          throw e;
+        }
+        // A wallet top-up order can never fund a booking.
+        if (regData.purpose === 'wallet_topup') {
+          const e = new Error('This order is a wallet top-up, not a booking payment.');
+          e.code = 'WRONG_ORDER_PURPOSE';
+          throw e;
+        }
       }
       const bookRef = db.collection('bookings').doc(bookingId);
       const bookSnap = await tx.get(bookRef);
@@ -231,6 +249,7 @@ export default async function handler(req, res) {
     });
   } catch (e) {
     if (e && e.code === 'ORDER_REUSED') return json(res, 409, { error: 'order_reused', message: e.message });
+    if (e && e.code === 'WRONG_ORDER_PURPOSE') return json(res, 400, { error: 'wrong_order_purpose', message: e.message });
     if (e && e.code === 'DUPLICATE_BOOKING') return json(res, 409, { error: 'duplicate_booking', message: e.message });
     console.error('[booking-create] txn', String(e && e.message || e).slice(0, 200));
     return json(res, 500, { error: 'booking_failed' });
