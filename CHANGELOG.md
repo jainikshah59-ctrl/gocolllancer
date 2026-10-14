@@ -6,6 +6,48 @@ verification first).
 
 ---
 
+## Cycle 12 (Worker E — Docs & Decisions, 2026-10-14) — Jainik-approved
+
+**Docs & config (no deploy):**
+
+- **Item 20 — SPA unification note:** new `ARCHITECTURE.md` documents that
+  `index.html` embeds the creator + brand SPAs as `text/plain` + iframe
+  `srcdoc`, and that helpers, icon sets, pricing math, and card renderers are
+  built twice. Recommends unifying to a single source of truth (shared
+  helpers module, one pricing module, one parameterized SPA, real entry
+  points instead of srcdoc). Documentation only — no refactor, needs
+  Jainik's explicit go-ahead.
+- **Item 21 — Paid Business Pro subscription:** `connect/brand-connect.js`
+  now implements the paid-Pro logic: `proSubscription` schema
+  (`status`/`startedAt`/`expiresAt`/`amount`) added to the `businesses` doc;
+  new `isProActive()` gates the 5% Pro discount (paid subscription active +
+  not expired, OR grandfathered legacy free Pro `isPro && proActive`);
+  `pricingFor()` uses `isProActive()`. Wallet view gets a Business Pro
+  section with a **"Go Pro — ₹999/month"** button (`A.gopro`) that creates a
+  Cashfree order with `purpose: 'pro_subscription'` (verified PAID + amount
+  server-side) and stamps `proSubscription` on the business doc. OPEN: move
+  the post-payment stamp server-side (cashfree-webhook / dedicated API).
+- **Item 23 — Fee model locked:** comment in `connect/lib/constants.js` —
+  12% brand-side + 5% creator-side (Jainik decision 2026-10-14; do NOT
+  change to Collabstr 10%/15% without explicit approval).
+- **Item 25 — return_url domain:** `api/cashfree-order.js` default
+  `return_url` moved from `collancer.in` to `gocolllancer.vercel.app`;
+  `notify_url` already used the app URL. Remaining `noreply@collancer.in`
+  email fallback flagged for Jainik's domain decision.
+- **Item 26 — Cashfree TEST mode:** verified `CASHFREE_ENV` defaults to
+  `test`/sandbox in all API files (`cashfree-order`, `cashfree-verify`,
+  `cashfree-webhook`, `booking-create`, `booking-deadlines`). No change.
+- **Item 28 — Unpriced creators:** discovery card shows a **"Custom rates"**
+  label for creators with no prices (`_hasPrices` flag); label made
+  consistent across `brand-connect.js` and the creator-side price banner
+  ("Contact for rates" → "Custom rates").
+- **Items 27/29 — Checklist:** `PRE-DEPLOY-CHECKLIST.md` now requires
+  `CASHFREE_APP_ID`/`CASHFREE_SECRET_KEY`/`CASHFREE_ENV` on the
+  **gocolllancer** Vercel project (test keys are on collancer-app, not
+  gocolllancer); `firebase deploy --only firestore:indexes`; explicit
+  GitHub remote `main` == local tree verification; `CRON_SECRET` ON HOLD
+  status.
+
 ## cda9399 — NEXUS 24/7 Cycles 3+4: all approved fixes (34 items)
 **Date:** 2026-10-14 02:26 UTC
 
