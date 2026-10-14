@@ -110,10 +110,10 @@ export default async function handler(req, res) {
         const bizSnap = await tx.get(bizRef);
         if (!bizSnap.exists) return 'skip'; // retry next run
         tx.update(bizRef, { walletBalance: FieldValue.increment(amt) });
-        // Unified ledger (see above): refund lands in `walletTransactions`
-        // with type 'refund'. Same deterministic id — merges over the
-        // 'pending' placeholder the creator client wrote, so the wallet UI
-        // shows exactly one refund row.
+        // Unified ledger (see above): the refund lands in `walletTransactions`
+        // with type 'refund'. Same deterministic id — the creator client no
+        // longer writes any ledger placeholder (rule-denied), so this cron
+        // write is the single source of the refund row.
         const ledgerRef = db.collection('walletTransactions').doc('refund_' + doc.id);
         tx.set(ledgerRef, {
           bizId: b.bizId, bookingId: doc.id, type: 'refund',
