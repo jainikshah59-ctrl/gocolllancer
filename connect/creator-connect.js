@@ -528,14 +528,10 @@ function deliverBooking(bookingId, deliveryUrl) {
     return ref.update(patch);
   }).then(function () {
     toast('Work delivered. The brand has 72 hours to review.');
-    if (bizId) {
-      DB.collection('bizNotifs').add({
-        bizId: bizId, type: 'work_delivered',
-        title: 'Work delivered',
-        body: (creatorDoc && creatorDoc.name ? creatorDoc.name : 'Creator') + ' delivered the work for your review.',
-        bookingId: String(bookingId), read: false, createdAt: FB.serverStamp(),
-      }).catch(function () {});
-    }
+    // REMOVED (Cycle 13+14+15, Item 7): the bizNotifs write here was 100%
+    // permission-denied — firestore.rules only let a user create bizNotifs
+    // for their own bizId, and this was the brand's. Server writes
+    // notifications via the Admin SDK instead.
   }).catch(function (e) {
     var m = (e && e.message) || '';
     if (m === 'not_your_booking') toast('This booking does not belong to your account.');
@@ -583,14 +579,9 @@ function loadBookings() {
         var opatch = { status: 'Active', acceptedAt: FB.serverStamp(), acceptedByCreator: true, seenByCreator: true };
         ref.update(opatch).then(function () {
           try { sendChatMessage(booking.id, 'Accepted your custom offer of \u20B9' + Number(booking.offerPrice || 0).toLocaleString('en-IN') + '.'); } catch (e) {}
-          if (booking._bizId) {
-            DB.collection('bizNotifs').add({
-              bizId: booking._bizId, type: 'offer_accepted',
-              title: 'Custom offer accepted',
-              body: (creatorDoc && creatorDoc.name ? creatorDoc.name : 'Creator') + ' accepted your custom offer.',
-              bookingId: booking.id, read: false, createdAt: FB.serverStamp(),
-            }).catch(function () {});
-          }
+          // REMOVED (Cycle 13+14+15, Item 7): the bizNotifs write here was
+          // 100% permission-denied (rules: bizNotifs create requires
+          // bizId == caller's own uid). Server writes notifications instead.
         }).catch(function () { toast('Could not update booking. Please try again.'); });
         return;
       }
@@ -621,15 +612,10 @@ function loadBookings() {
           });
         }).then(notifyBiz).catch(function () { toast('Could not update booking. Please try again.'); });
       function notifyBiz() {
-        if (booking._bizId) {
-          DB.collection('bizNotifs').add({
-            bizId: booking._bizId, type: action === 'accept' ? 'booking_accepted' : 'booking_rejected',
-            title: action === 'accept' ? 'Booking accepted' : 'Booking declined',
-            body: (creatorDoc && creatorDoc.name ? creatorDoc.name : 'Creator') +
-              (action === 'accept' ? ' accepted your collaboration request.' : ' declined your collaboration request.'),
-            bookingId: booking.id, read: false, createdAt: FB.serverStamp(),
-          }).catch(function () {});
-        }
+        // REMOVED (Cycle 13+14+15, Item 7): the bizNotifs write here was
+        // 100% permission-denied — firestore.rules only let a user create
+        // bizNotifs for their own bizId, and this was the brand's. Kept as
+        // a no-op so the .then(notifyBiz) call chain still settles cleanly.
       }
     };
   } catch (e) {}
