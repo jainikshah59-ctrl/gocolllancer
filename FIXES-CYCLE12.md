@@ -102,7 +102,7 @@ Dispute form (description + up to 3 evidence URLs) → `disputeEvidence[]`. Frau
 
 1. **Firestore rules MUST be published manually** in Firebase console (all Worker B + D rule changes).
 2. **CRON_SECRET stays ON HOLD** until legacy paidAmount audit (standing blocker).
-3. **Vercel function count: 12/12** (Hobby limit reached with new `booking-action.js`). No more API files without removing one.
+3. **Vercel function count: 10/12** (was 12/12 — `api/cleo-ai.js` and `api/edge-tts.js` deleted 2026-10-14, zero callers, backups in `/tmp/dead-api-backup/`; frees 2 slots).
 4. **Cashfree keys** need setting on the gocolllancer project (Item 27).
 5. **VCIP** still pending for Cashfree production.
 6. Pro subscription stamp should move server-side (currently client write).
@@ -114,3 +114,69 @@ Dispute form (description + up to 3 evidence URLs) → `disputeEvidence[]`. Frau
 - `firestore.rules`, `index.html`
 - `ARCHITECTURE.md` (NEW), `CHANGELOG.md`, `PRE-DEPLOY-CHECKLIST.md`
 - `FIXES-CYCLE12.md` (this file)
+
+---
+
+## Cycle 13+14+15 addendum — Worker D (Features + Docs), 2026-10-14
+
+**NOT committed, NOT pushed, NOT deployed** (per standing rule). Rules-file
+changes still need Jainik/Muse's manual Firebase publish.
+
+### D1. Tax compliance roadmap (docs only — no tax logic implemented)
+- **NEW `TAX-COMPLIANCE-ROADMAP.md`**: TDS 194J @10% on creator payments
+  (₹50,000/payee/FY threshold, per-FY tracking design), GST on the platform
+  fee (ECO model; tax invoice to brand — the invoice UI from item 18 already
+  exists, Collancer GSTIN still placeholder `29XXXXX0000X1Z5`), TCS u/s 52
+  @2% applicability, ghosting-protection logic summary. **CA must confirm all
+  five open points before any implementation.**
+
+### D2. Ghosting protection (documented + commented)
+- The 72h accept-window auto-cancel (`acceptDeadline`, cron section 1) already
+  implements it: creator doesn't accept in 72h → auto-cancel + **full** brand
+  refund. Header comments in `api/booking-deadlines.js` now spell this out;
+  post-acceptance ghosting is covered by the Active-cancel path below.
+
+### D3. 10% kill-fee on brand-cancelled Active bookings (implemented)
+- `connect/brand-connect.js` `cancelBooking` now records `statusBeforeCancel`
+  alongside the refund intent (rules updated to allow the new key +
+  `refundStatus` on brand-cancel writes).
+- `api/booking-deadlines.js` section 1b (the refund executor) now: brand
+  refund = `paidAmount − platformFee` (Item 24 policy, now actually executed —
+  previously the executor refunded the full amount); creator kill-fee =
+  `min(10% of paidAmount, platformFee)` queued to
+  `payoutRequests/killfee_{bookingId}` for admin release; booking stamped with
+  `killFee`/`killFeeQueued`. Pending cancels and creator rejects still get
+  full refunds. Transitional bookings without `statusBeforeCancel` fall back
+  to full refund (fail-safe).
+
+### D4–D9. Verified already-shipped Cycle 12 items (no changes needed)
+- **Discovery filters** (budget min/max, follower min, sort by
+  followers/engagement/price + Clear): present and wired in `index.html`
+  (`filtersHTML`, `listHTML`, input/change handlers, `fclear`).
+- **Creator shortlist**: present — `savedCreators/{bizUid}/creators/{creatorId}`,
+  bookmark toggle on discovery cards, synced snapshot re-renders the list.
+- **Custom offers**: end-to-end — brand proposes (`sendCustomOffer`), creator
+  accepts/counters (`counter_offer` typed chat message, `ccAcceptCounter`),
+  brand pays the accepted price via `book-with-wallet` (`payOffer`).
+- **Hindi microcopy**: `MONEY_I18N` EN/HI (~28 keys) present in both SPAs.
+  **Added** `'Escrow'/'एस्क्रो'` and `'In escrow'/'एस्क्रो में'` keys to both
+  dicts; the Campaign spend-summary "In escrow" row now goes through `tM()`.
+- **Verified-brand badge**: wired — `vbadge()` chip renders from
+  `businesses/{uid}.verified` (note: the canonical field is `verified`; there
+  is no separate `isVerifiedBrand` field). Shown on the brand dashboard name,
+  marketplace posts, and creator booking details. GSTIN collected on the
+  invoice via `S.bizGstin`.
+- **Dispute evidence**: fully wired — `disputeForm` (description + 3 evidence
+  URL inputs + fraud-signal check) → `dispgo` → `collancerReviewBooking(...,
+  'dispute', desc, urls)` → `disputeEvidence[]` on the booking (rule-safe).
+
+### D10. Dead APIs deleted (frees 2 Vercel slots)
+- `api/cleo-ai.js` and `api/edge-tts.js` deleted (zero callers — grep over
+  `*.js`/`*.html`/`*.json`/`*.md` shows only historical doc mentions).
+  Backups: `/tmp/dead-api-backup/`. Function count now **10/12**.
+
+### Stale-claim corrections
+- Item 24's "Active → refund minus platform fee" was previously enforced only
+  at the rules level (intent attach); the cron executor refunded the FULL
+  amount. The executor now implements the policy + kill-fee (D3 above).
+- Vercel function count corrected: 10/12 (was stated 12/12).
