@@ -146,9 +146,12 @@ export default async function handler(req, res) {
     return json(res, 502, { error: 'network' });
   }
   if (order.order_status !== 'PAID') return json(res, 400, { error: 'order_not_paid', order_status: order.order_status });
-  // The order must have been created for THIS brand (cashfree-order binds customer_id to the Firebase UID).
+  // The order must have been created for THIS brand (cashfree-order binds
+  // customer_id to the verified Firebase UID). FAIL CLOSED: an order with no
+  // customer binding is never consumable — skipping the check would let any
+  // authed brand consume another brand's order.
   const orderCust = order.customer_details && order.customer_details.customer_id;
-  if (orderCust && String(orderCust) !== uid) return json(res, 403, { error: 'order_owner_mismatch' });
+  if (!orderCust || String(orderCust) !== uid) return json(res, 403, { error: 'order_owner_mismatch' });
 
   // (c) server-computed expected total — canonical pricing formula.
   // Business Pro = 5% off the CREATOR PRICE first, then 12% fee on the discounted price.
