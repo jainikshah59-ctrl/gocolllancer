@@ -6,6 +6,7 @@
  *         or { configured: false } when keys are not set (frontend falls back to demo simulation).
  */
 const API_VERSION = '2023-08-01';
+const APP_URL = process.env.APP_URL || 'https://gocolllancer.vercel.app';
 
 function base(env) {
   return env === 'production' ? 'https://api.cashfree.com/pg' : 'https://sandbox.cashfree.com/pg';
@@ -69,7 +70,8 @@ export default async function handler(req, res) {
         },
         order_meta: {
           return_url: body.returnUrl || 'https://collancer.in/payment/return?order_id=' + orderId,
-          notify_url: body.notifyUrl || undefined,
+          // Server webhook for the paid-but-tab-closed case (api/cashfree-webhook).
+          notify_url: body.notifyUrl || (APP_URL + '/api/cashfree-webhook'),
         },
         order_note: String(body.purpose || 'Collancer payment').slice(0, 200),
       }),
@@ -78,6 +80,23 @@ export default async function handler(req, res) {
     if (!cfRes.ok || !data.payment_session_id) {
       console.error('[cashfree-order]', cfRes.status, JSON.stringify(data).slice(0, 300));
       return json(res, 502, { error: 'order_failed', detail: String(data.message || '').slice(0, 160) });
+    }
+    // Register the order server-side (C7#5): /api/booking-create consumes it,
+    // and the cron reconcile (api/booking-deadlines) re-checks 'created'
+    // orders that never became bookings. Best-effort — the order itself is
+    // already live at Cashfree even if this write fails.
+    try {
+      const { getAdmin } = await import('../lib/firebaseAdmin.js');
+      const { FieldValue } = await import('firebase-admin/firestore');
+      await getAdmin().firestore().collection('payment_orders').doc(orderId).set({
+        uid, amount: Math.round(amount * 100) / 100, currency: 'INR',
+        status: 'created', bookingId: null,
+        customerEmail: String(customer.email || 'noreply@collancer.in').slice(0, 128),
+        cashfreeEnv: env, createdAt: FieldValue.serverTimestamp(),
+        updatedAt: FieldValue.serverTimestamp(),
+      }, { merge: true });
+    } catch (e) {
+      console.error('[cashfree-order] registry write failed', String(e && e.message || e).slice(0, 160));
     }
     return json(res, 200, {
       configured: true,
