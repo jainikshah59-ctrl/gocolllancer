@@ -51,14 +51,16 @@ service cloud.firestore {
       allow update: if isAdmin()
         || (isOwner(id)
           && !request.resource.data.diff(resource.data).affectedKeys()
-            .hasAny(['verificationStatus', 'verified', 'addedToCollancer', 'adminNotes', 'banned', 'instagram'])
+            .hasAny(['verificationStatus', 'verified', 'addedToCollancer', 'adminNotes', 'banned', 'instagram', 'rating'])
           && (resource.data.get('instagram', null) == null
             || !request.resource.data.diff(resource.data).affectedKeys()
-              .hasAny(['handle', 'handleLower', 'pfp', 'followers', 'bio'])))
-        || (isAuthed()
-          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['rating'])
-          && request.resource.data.rating >= 0
-          && request.resource.data.rating <= 5);
+              .hasAny(['handle', 'handleLower', 'pfp', 'followers', 'bio'])));
+        // B-M9 (rating manipulation): the old branch let ANY signed-in user
+        // rewrite any creator's rating 0-5. Rules cannot verify a completed-
+        // booking rater<->creator relationship without a query, so client
+        // rating writes are now admin/server-only. The safe client path is a
+        // future ratings-by-bookingId flow (ratings/{bookingId}, booking
+        // Completed && booking.bizId == auth.uid).
 
       allow delete: if false;
     }
@@ -282,23 +284,36 @@ service cloud.firestore {
 
     match /walletTransactions/{id} {
       allow read: if isAdmin() || (isAuthed() && resource.data.bizId == request.auth.uid);
+      // B-M7: entries are bound to the writer's own business — no forging
+      // ledger rows for other businesses. Append-only (update/delete denied).
       allow create: if isAuthed()
+        && request.resource.data.bizId == request.auth.uid
         && request.resource.data.type in ['deposit', 'booking_deduction', 'refund'];
       allow update, delete: if false; // append-only ledger
     }
 
     /* ---------------- payouts ---------------- */
 
+    // Canonical creator earnings for a payout booking (95% of creatorPrice).
+    // Fails closed: missing booking doc or missing creatorPrice denies.
+    function payoutBookingData() {
+      return get(/databases/$(database)/documents/bookings/$(request.resource.data.bookingId)).data;
+    }
+
     match /payoutRequests/{id} {
       allow read: if isAdmin() || (isAuthed() && resource.data.creatorId == request.auth.uid);
+      // B-H4: payout amount must EXACTLY equal the booking's canonical
+      // creator earnings — Math.round(creatorPrice * 0.95). bookingId is
+      // required in both branches so no invented amounts pass.
       allow create: if isAuthed()
         && request.resource.data.status == 'pending'
         && request.resource.data.amount >= 100
+        && request.resource.data.bookingId is string
+        && request.resource.data.amount == Math.round(payoutBookingData().creatorPrice * 0.95)
         && (request.resource.data.creatorId == request.auth.uid
           // brand may queue payout for its completed booking
-          || (request.resource.data.bookingId is string
-            && get(/databases/$(database)/documents/bookings/$(request.resource.data.bookingId)).data.bizId == request.auth.uid
-            && get(/databases/$(database)/documents/bookings/$(request.resource.data.bookingId)).data.status == 'Completed'));
+          || (payoutBookingData().bizId == request.auth.uid
+            && payoutBookingData().status == 'Completed'));
       allow update: if isAdmin();
       allow delete: if false;
     }
@@ -456,7 +471,9 @@ service cloud.firestore {
 
     match /bizNotifs/{id} {
       allow read: if isAdmin() || (isAuthed() && resource.data.bizId == request.auth.uid);
-      allow create: if isAuthed();
+      // B-M8 anti-phishing: only the owning business (or admin/server) may
+      // create its own notifications — no cross-user forged alerts.
+      allow create: if isAuthed() && (request.resource.data.bizId == request.auth.uid || isAdmin());
       allow update: if isAdmin()
         || (isAuthed() && resource.data.bizId == request.auth.uid
           && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read', 'readAt']));
@@ -465,7 +482,9 @@ service cloud.firestore {
 
     match /creatorNotifs/{id} {
       allow read: if isAdmin() || (isAuthed() && resource.data.creatorId == request.auth.uid);
-      allow create: if isAuthed();
+      // B-M8 anti-phishing: only the owning creator (or admin/server) may
+      // create its own notifications — no cross-user forged alerts.
+      allow create: if isAuthed() && (request.resource.data.creatorId == request.auth.uid || isAdmin());
       allow update: if isAdmin()
         || (isAuthed() && resource.data.creatorId == request.auth.uid
           && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read', 'readAt']));
@@ -474,7 +493,9 @@ service cloud.firestore {
 
     match /adminNotifs/{id} {
       allow read, update: if isAdmin();
-      allow create: if isAuthed();
+      // B-M8: admin alerts come from admin/server only — clients cannot
+      // inject fake admin notifications.
+      allow create: if isAdmin();
       allow delete: if false;
     }
 
@@ -491,17 +512,17 @@ service cloud.firestore {
     }
 
     /* ---------------- pre-registrations (CollancerWeb + Registerationadmin) ---------------- */
-    // Restored from the pre-rebuild rules on collancer-8fd62 (lost when the
-    // new app's rules were deployed). CollancerWeb is a public site with no
-    // auth: it runs a dup-check query (where email == X, limit 1) and creates
-    // docs. Registerationadmin's client has no Firebase Auth either and uses
-    // onSnapshot (read-all) + updateDoc (status) + deleteDoc.
+    // CollancerWeb is a public site with no auth: it runs a dup-check query
+    // (where email == X, limit 1) and creates docs — read + create stay
+    // public. update/delete were public (B-H3: anyone could rewrite or wipe
+    // PII registrations); they are now admin-only. Admin tooling must use
+    // the Admin SDK (bypasses rules), not the unauthenticated client.
     match /registrations/{id} {
       allow read: if true;
       allow create: if request.resource.data.name is string
         && request.resource.data.email is string
         && request.resource.data.phone is string;
-      allow update, delete: if true;
+      allow update, delete: if isAdmin();
     }
 
     /* ---------------- default deny ---------------- */
