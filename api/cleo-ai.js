@@ -122,6 +122,16 @@ export default async function handler(req, res) {
       try { body = JSON.parse(body); } catch { body = {}; }
     }
     body = body && typeof body === 'object' ? body : {};
+    // Auth: a Firebase ID token is required (same verifyUid pattern as other
+    // server APIs) — this endpoint must not be an open compute oracle.
+    try {
+      const { verifyUid } = await import('../lib/firebaseAdmin.js');
+      const tok = body.idToken || ((req.headers && req.headers.authorization) || '').replace(/^Bearer\s+/i, '');
+      await verifyUid(tok);
+    } catch {
+      const fb = safeFallback('');
+      return res.status(200).json({ ...fb, error: 'auth_required' });
+    }
     const query = String(body.query || '').trim();
     if (!query) return res.status(200).json(safeFallback(''));
 
