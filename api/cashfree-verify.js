@@ -61,6 +61,12 @@ export default async function handler(req, res) {
       order_amount: data.order_amount,
       cf_payment_id: data.cf_order_id || null,
       env,
+      // Optional caller-supplied amount check: the caller (booking flow)
+      // sends the server/client-expected total so a PAID order for a
+      // different amount can be rejected before a booking is written.
+      ...(Number.isFinite(Number(body.expected_amount)) ? {
+        amount_matches: Math.abs(Number(data.order_amount) - Number(body.expected_amount)) < 0.01,
+      } : {}),
     });
   } catch (e) {
     console.error('[cashfree-verify] network', String(e && e.message || e).slice(0, 160));
