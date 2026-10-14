@@ -3,13 +3,23 @@
  * a brand can pay at Cashfree and never reach /api/booking-create, leaving
  * money moved with no booking and nobody notified.
  *
- * Security:
- *  - Signature verified with HMAC-SHA256 over the RAW body against
- *    CASHFREE_WEBHOOK_SECRET (base64 digest), compared with
- *    crypto.timingSafeEqual. Fail closed: no secret configured or bad
- *    signature -> reject. bodyParser is disabled (raw body required).
+ * Security (Item 9):
+ *  - Signature verified per Cashfree's documented scheme: signedPayload =
+ *    x-webhook-timestamp + RAW body, HMAC-SHA256 keyed by the client secret
+ *    (CASHFREE_SECRET_KEY), base64 digest, compared with
+ *    crypto.timingSafeEqual. Fail closed: no secret configured, missing
+ *    headers, or bad signature -> reject. bodyParser is disabled (raw body
+ *    required) — never re-serialize parsed JSON for verification.
  *  - Idempotent via cashfree_events/{eventId} docs — Cashfree retries
  *    webhooks, and duplicate processing must never double-flag.
+ *
+ * Wallet top-ups (Item 2):
+ *  - Orders registered with purpose:'wallet_topup' (see /api/cashfree-order)
+ *    are credited to the business wallet SERVER-SIDE on PAYMENT_SUCCESS:
+ *    businesses/{uid}.walletBalance is incremented and a `deposit` entry is
+ *    written to walletTransactions with the deterministic id deposit_{orderId}.
+ *    The registry row flips 'created' -> 'credited' inside the transaction,
+ *    so retried webhooks can never double-credit.
  *
  * PAYMENT_SUCCESS flow:
  *  - payment_orders/{orderId} exists WITH bookingId -> already booked: ack.
@@ -28,7 +38,6 @@ import { FieldValue } from 'firebase-admin/firestore';
 
 export const config = { api: { bodyParser: false } };
 
-const WEBHOOK_SECRET_ENV = 'CASHFREE_WEBHOOK_SECRET';
 
 function json(res, code, obj) {
   res.statusCode = code;
@@ -43,11 +52,18 @@ async function readRawBody(req) {
   return Buffer.concat(chunks);
 }
 
-function verifySignature(rawBody, signature, secret) {
-  if (!secret || !signature) return false;
+/* Cashfree's documented webhook scheme (Item 9):
+ *   signedPayload = x-webhook-timestamp + rawBody
+ *   expectedSignature = base64( HMAC-SHA256(signedPayload, clientSecret) )
+ * Compare against the x-webhook-signature header. */
+function verifySignature(rawBody, signature, timestamp, secret) {
+  if (!secret || !signature || !timestamp) return false;
   let expected;
   try {
-    expected = crypto.createHmac('sha256', secret).update(rawBody).digest('base64');
+    expected = crypto.createHmac('sha256', secret)
+      .update(String(timestamp))
+      .update(rawBody)
+      .digest('base64');
   } catch { return false; }
   const a = Buffer.from(expected, 'utf8');
   const b = Buffer.from(String(signature), 'utf8');
@@ -58,9 +74,10 @@ function verifySignature(rawBody, signature, secret) {
 export default async function handler(req, res) {
   if (req.method !== 'POST') return json(res, 405, { error: 'method_not_allowed' });
 
-  const secret = process.env[WEBHOOK_SECRET_ENV];
+  // The webhook is signed with the Cashfree client secret (x-client-secret).
+  const secret = process.env.CASHFREE_SECRET_KEY;
   if (!secret) {
-    // Fail closed: without the webhook secret there is nothing trustworthy to verify.
+    // Fail closed: without the client secret there is nothing trustworthy to verify.
     return json(res, 503, { ok: false, err: 'webhook_not_configured' });
   }
 
@@ -68,8 +85,9 @@ export default async function handler(req, res) {
   try { raw = await readRawBody(req); }
   catch { return json(res, 400, { ok: false, err: 'bad_body' }); }
 
-  const signature = req.headers['x-webhook-signature'] || req.headers['x-webhooksignature'];
-  if (!verifySignature(raw, signature, secret)) {
+  const signature = req.headers['x-webhook-signature'];
+  const timestamp = req.headers['x-webhook-timestamp'];
+  if (!verifySignature(raw, signature, timestamp, secret)) {
     return json(res, 401, { ok: false, err: 'bad_signature' });
   }
 
@@ -113,9 +131,9 @@ export default async function handler(req, res) {
   }
 
   try {
-    await db.runTransaction(async (tx) => {
+    const outcome = await db.runTransaction(async (tx) => {
       const ev = await tx.get(eventRef);
-      if (ev.exists) return; // retried concurrently — already processed
+      if (ev.exists) return 'duplicate'; // retried concurrently — already processed
       tx.set(eventRef, {
         type, orderId, cfPaymentId: cfPaymentId || null, amount,
         receivedAt: now,
@@ -132,7 +150,36 @@ export default async function handler(req, res) {
           cfPaymentId: cfPaymentId || null, status: 'booked',
           webhookReceivedAt: now, updatedAt: now,
         }, { merge: true });
-        return;
+        return 'booked';
+      }
+
+      // Item 2 — WALLET TOP-UP: credit the business wallet server-side.
+      // The order is distinguished by its purpose tag in the registry
+      // (written by /api/cashfree-order). Idempotent: the registry row flips
+      // 'created' -> 'credited' inside this transaction and the deposit ledger
+      // entry has the deterministic id deposit_{orderId}, so a retried
+      // webhook can never double-credit the wallet. Amount is server-truth
+      // (the registry row / webhook payload), never client-supplied.
+      if (reg && reg.purpose === 'wallet_topup') {
+        if (reg.status === 'credited') return 'topup_duplicate';
+        const credit = Number(reg.amount || amount || 0);
+        const bizRef = bizId ? db.collection('businesses').doc(bizId) : null;
+        const bizSnap = bizRef ? await tx.get(bizRef) : null;
+        if (bizSnap && bizSnap.exists && credit > 0) {
+          tx.update(bizRef, { walletBalance: FieldValue.increment(credit) });
+          tx.set(db.collection('walletTransactions').doc('deposit_' + orderId), {
+            bizId, orderId, type: 'deposit', amount: credit,
+            cfPaymentId: cfPaymentId || null, createdAt: now,
+            note: 'Wallet top-up via Cashfree',
+          }, { merge: true });
+          tx.set(regRef, {
+            status: 'credited', cfPaymentId: cfPaymentId || null,
+            paidViaWebhook: true, creditedAt: now, updatedAt: now,
+          }, { merge: true });
+          return 'topup_credited';
+        }
+        // Cannot credit (unknown business / bad amount) — fall through to
+        // the unclaimed flagging below so admin can follow up.
       }
 
       if (regSnap.exists) {
@@ -160,7 +207,34 @@ export default async function handler(req, res) {
         createdAt: FieldValue.serverTimestamp(),
         updatedAt: FieldValue.serverTimestamp(),
       }, { merge: true });
+      return 'unclaimed';
     });
+
+    // Wallet top-up outcomes: ack only (plus a credit confirmation for the
+    // brand on first credit). No unclaimed/admin noise for top-ups.
+    if (outcome === 'topup_credited' || outcome === 'topup_duplicate' || outcome === 'booked') {
+      if (outcome === 'topup_credited') {
+        const regSnap = await db.collection('payment_orders').doc(orderId).get();
+        const bizId = regSnap.exists ? (regSnap.data() || {}).uid : null;
+        if (bizId) {
+          try {
+            await db.collection('bizNotifs').add({
+              bizId, type: 'wallet_credited',
+              title: 'Wallet credited',
+              body: 'Your Collancer wallet was topped up by Rs.' +
+                Number(amount || 0).toLocaleString('en-IN') + ' via Cashfree.',
+              orderId, read: false, createdAt: FieldValue.serverTimestamp(),
+            });
+          } catch (e) {
+            console.error('[cashfree-webhook] bizNotif', String(e && e.message || e).slice(0, 160));
+          }
+        }
+      }
+      return json(res, 200, { ok: true, outcome });
+    }
+    if (outcome === 'duplicate') {
+      return json(res, 200, { ok: true, duplicate: true });
+    }
 
     // Notifications (outside the txn; best-effort).
     const regSnap = await db.collection('payment_orders').doc(orderId).get();
