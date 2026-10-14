@@ -205,6 +205,32 @@ service cloud.firestore {
         && (!('refundAmount' in d) || d.refundAmount == 0);
     }
 
+    /* ------------------------------------------------------------------
+       Item 24 (Cycle 12) — BRAND-CANCEL REFUND POLICY
+       ------------------------------------------------------------------
+       (a) Booking status 'Pending' + brand cancels -> FULL refund:
+           refundAmount = paidAmount, refundRequested = true
+       (b) Booking status 'Active'  + brand cancels -> partial refund:
+           refundAmount = paidAmount - platformFee, refundRequested = true
+
+       These rules only ATTACH the refund request to the booking doc.
+       Execution (wallet credit + ledger row) stays in the refund cron,
+       which MUST use server-truth paidAmount/platformFee from the booking
+       doc and never trust these client-set fields blindly.
+       ------------------------------------------------------------------ */
+    function brandCancelRefundAmount(old, deductFee) {
+      let paid = old.paidAmount is number ? old.paidAmount : -1;
+      let fee = old.platformFee is number ? old.platformFee : 0;
+      return deductFee ? paid - fee : paid;
+    }
+
+    function brandCancelRefundOk(d, old, deductFee) {
+      let expected = brandCancelRefundAmount(old, deductFee);
+      return expected >= 0
+        && (!('refundAmount' in d) || d.refundAmount == expected)
+        && (!('refundRequested' in d) || d.refundRequested == true);
+    }
+
     match /bookings/{id} {
       allow read: if isAdmin()
         || (isAuthed() && (
@@ -255,7 +281,7 @@ service cloud.firestore {
                 (resource.data.paidAmount is number ? resource.data.paidAmount : 0)))
           && request.resource.data.diff(resource.data).affectedKeys()
             .hasOnly(['status', 'rejectedAt', 'rejectedByCreator', 'rejectionReason',
-              'refundProcessed', 'refundAmount', 'refundStatus', 'refundedAt', 'seenByCreator']))
+              'refundProcessed', 'refundRequested', 'refundAmount', 'refundStatus', 'refundedAt', 'seenByCreator']))
         // CREATOR delivery submit: Active -> PendingCompletion
         || (isAuthed() && resource.data.creatorId == request.auth.uid
           && resource.data.status == 'Active'
@@ -264,12 +290,24 @@ service cloud.firestore {
             .hasOnly(['status', 'driveLink', 'promotedVideoLink', 'deliverySubmittedAt',
               'completionRequestedAt', 'adminRejected', 'adminRejectionReason',
               'reviewDeadline', 'seenByCreator']))
-        // BUSINESS cancel: Pending/Active -> Cancelled
+        // BUSINESS cancel (Item 24 — brand-cancel refund policy):
+        //   Pending -> Cancelled  : FULL refund (refundAmount == paidAmount)
+        //   Active  -> Cancelled  : partial refund (refundAmount == paidAmount - platformFee)
+        // Only ATTACHES the refund request; the refund cron executes it.
         || (isAuthed() && resource.data.bizId == request.auth.uid
-          && resource.data.status in ['Pending', 'Active']
+          && resource.data.status == 'Pending'
           && request.resource.data.status == 'Cancelled'
+          && brandCancelRefundOk(request.resource.data, resource.data, false)
           && request.resource.data.diff(resource.data).affectedKeys()
-            .hasOnly(['status', 'cancelledAt', 'cancelledByBiz', 'cancelReason', 'seenByBiz']))
+            .hasOnly(['status', 'cancelledAt', 'cancelledByBiz', 'cancelReason',
+              'seenByBiz', 'refundAmount', 'refundRequested']))
+        || (isAuthed() && resource.data.bizId == request.auth.uid
+          && resource.data.status == 'Active'
+          && request.resource.data.status == 'Cancelled'
+          && brandCancelRefundOk(request.resource.data, resource.data, true)
+          && request.resource.data.diff(resource.data).affectedKeys()
+            .hasOnly(['status', 'cancelledAt', 'cancelledByBiz', 'cancelReason',
+              'seenByBiz', 'refundAmount', 'refundRequested']))
         // BUSINESS approve: PendingCompletion -> Completed
         || (isAuthed() && resource.data.bizId == request.auth.uid
           && resource.data.status == 'PendingCompletion'
@@ -288,7 +326,8 @@ service cloud.firestore {
           && resource.data.status == 'PendingCompletion'
           && request.resource.data.status == 'Disputed'
           && request.resource.data.diff(resource.data).affectedKeys()
-            .hasOnly(['status', 'disputeReason', 'disputeOpenedAt', 'disputeOpenedBy',
+            .hasOnly(['status', 'disputeReason', 'disputeEvidence',
+              'disputeOpenedAt', 'disputeOpenedBy',
               'updatedAt', 'seenByBiz']));
 
       allow delete: if false;
@@ -308,12 +347,23 @@ service cloud.firestore {
 
     match /walletTransactions/{id} {
       allow read: if isAdmin() || (isAuthed() && resource.data.bizId == request.auth.uid);
-      // B-M7: entries are bound to the writer's own business — no forging
-      // ledger rows for other businesses. Append-only (update/delete denied).
-      allow create: if isAuthed()
-        && request.resource.data.bizId == request.auth.uid
-        && request.resource.data.type in ['deposit', 'booking_deduction', 'refund'];
+      // Item 8 (Cycle 12) — ledger hardening: NO client may append to the
+      // ledger at all. 'deposit' rows are server/admin-only (crediting is
+      // done by the admin-credit flow and the refund cron, both via the
+      // Admin SDK which bypasses rules). This closes client-forged
+      // 'deposit' entries — previously a client could self-credit its own
+      // wallet with an invented amount. Append-only remains (update/delete
+      // denied; the server writes via Admin SDK).
+      allow create: if false; // server-only via Admin SDK
       allow update, delete: if false; // append-only ledger
+    }
+
+    /* ---------------- wallet_ledger (server-only via Admin SDK) ----------------
+       Canonical ledger collection. No client reads or writes — the server
+       (Admin SDK) bypasses rules entirely. */
+
+    match /wallet_ledger/{id} {
+      allow read, write: if false;
     }
 
     /* ---------------- payouts ---------------- */
@@ -423,10 +473,27 @@ service cloud.firestore {
 
     /* ---------------- reviews ---------------- */
 
+    // Item 3 (Cycle 12): a review may only be created by a brand that has a
+    // COMPLETED booking with the reviewee (creator). The review doc must
+    // carry bookingId of that booking. get() on a missing booking doc
+    // errors -> the create is denied (fail closed). This closes the old
+    // any-user-can-rate-any-creator hole noted in the B-M9 comment above.
+    function completedBookingWith(bid, reviewee) {
+      let b = get(/databases/$(database)/documents/bookings/$(bid)).data;
+      return b.status == 'Completed'
+        && b.bizId == request.auth.uid
+        && b.creatorId == reviewee;
+    }
+
     match /reviews/{id} {
       allow read: if true;
       allow create: if isAuthed()
+        && request.resource.data.bookingId is string
+        && request.resource.data.bookingId.size() > 0
         && request.resource.data.creatorId is string
+        && request.resource.data.creatorId.size() > 0
+        && completedBookingWith(request.resource.data.bookingId, request.resource.data.creatorId)
+        && request.resource.data.stars is number
         && request.resource.data.stars >= 1
         && request.resource.data.stars <= 5;
       allow update, delete: if false;
@@ -450,6 +517,12 @@ service cloud.firestore {
           || (request.resource.data.senderType == 'creator'
             && get(/databases/$(database)/documents/bookings/$(request.resource.data.bookingId)).data.creatorId == request.auth.uid));
       allow update, delete: if false;
+    }
+
+    /* ---------------- saved creators (brand shortlist, Cycle 12 Item 10) ---------------- */
+
+    match /savedCreators/{bizId}/creators/{creatorId} {
+      allow read, write: if isAuthed() && request.auth.uid == bizId;
     }
 
     /* ---------------- promo demos ---------------- */
@@ -539,13 +612,16 @@ service cloud.firestore {
     }
 
     /* ---------------- pre-registrations (CollancerWeb + Registerationadmin) ---------------- */
-    // CollancerWeb is a public site with no auth: it runs a dup-check query
-    // (where email == X, limit 1) and creates docs — read + create stay
-    // public. update/delete were public (B-H3: anyone could rewrite or wipe
-    // PII registrations); they are now admin-only. Admin tooling must use
-    // the Admin SDK (bypasses rules), not the unauthenticated client.
+    // Item 4 (Cycle 12): public read was CLOSED. Registration PII (name,
+    // email, phone) is now readable only by the registrant themselves
+    // (doc's uid == auth uid) or an admin. create stays open for signup,
+    // with required-field validation. update/delete were already admin-only
+    // (B-H3 fix). NOTE: CollancerWeb's unauthenticated dup-check query
+    // (where email == X) will now be denied — move that check server-side.
+    // Admin tooling must use the Admin SDK (bypasses rules).
     match /registrations/{id} {
-      allow read: if true;
+      allow read: if isAuthed()
+        && (request.auth.uid == resource.data.uid || isAdmin());
       allow create: if request.resource.data.name is string
         && request.resource.data.email is string
         && request.resource.data.phone is string;
