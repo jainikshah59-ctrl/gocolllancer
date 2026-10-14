@@ -1,10 +1,30 @@
 /* POST /api/cashfree-order
  * Creates a Cashfree PG order server-side (secret key never leaves the server).
  * Env: CASHFREE_APP_ID, CASHFREE_SECRET_KEY, CASHFREE_ENV ('test' | 'production', default 'test').
- * Input:  { amount, purpose, customer: { id, email, phone } }
- * Output: { configured: true, payment_session_id, order_id, order_status, env }
+ * Input:  { amount, purpose, creatorId, creatorPrice, label, customer: { email, phone } }
+ *          (`customer.id` is ignored — customer_id is always the verified UID.)
+ * Output: { configured: true, payment_session_id, order_id, order_status, order_amount, purpose, env }
  *         or { configured: false } when keys are not set (frontend falls back to demo simulation).
+ *
+ * Security:
+ *  - `purpose` is NORMALIZED server-side into the registry contract
+ *    (lib/pricing.normalizePurpose): 'wallet_topup' | 'pro_subscription' |
+ *    'booking_payment'. The client label can drift without changing what the
+ *    webhook does — a label/purpose mismatch can never skip server-side
+ *    money handling.
+ *  - Amounts are RECOMPUTED server-side, never trusted from the client:
+ *      * booking_payment: creatorPrice must match the creator's rate card
+ *        (creators/{creatorId}.prices, Rs.1 tolerance); the charge is the
+ *        canonical total (5% Pro off creator price first, then 12% fee —
+ *        Pro status read server-side from businesses/{uid}).
+ *      * wallet_topup: the brand chooses the amount, bounded Rs.100-1,00,000.
+ *      * pro_subscription: fixed server constant (Rs.999); the client amount
+ *        is ignored entirely.
+ *  - return_url / notify_url are SERVER-PINNED (client values ignored):
+ *    APP_URL + '/payment/return?order_id=…' and APP_URL + '/api/cashfree-webhook'.
  */
+import { normalizePurpose, canonicalTotal, isProActiveBiz, listedPrices, PRO_SUBSCRIPTION_PRICE_INR } from '../lib/pricing.js';
+
 const API_VERSION = '2023-08-01';
 const APP_URL = process.env.APP_URL || 'https://gocolllancer.vercel.app';
 
@@ -32,10 +52,12 @@ export default async function handler(req, res) {
 
   // Require Firebase auth — bind customer.id to verified UID
   let uid = null;
+  let db = null;
   try {
     const { getAdmin } = await import('../lib/firebaseAdmin.js');
     const admin = getAdmin();
-    const idToken = body.idToken || req.headers.authorization?.replace('Bearer ', '');
+    db = admin.firestore();
+    const idToken = body.idToken || (req.headers.authorization || '').replace(/^Bearer\s+/i, '');
     if (!idToken) return json(res, 401, { error: 'auth_required' });
     const decoded = await admin.auth().verifyIdToken(idToken);
     uid = decoded.uid;
@@ -43,17 +65,51 @@ export default async function handler(req, res) {
     return json(res, 401, { error: 'invalid_token' });
   }
 
-  const amount = Number(body.amount);
-  if (!Number.isFinite(amount) || amount <= 0 || amount > 1000000)
-    return json(res, 400, { error: 'bad_amount' });
+  // Purpose is normalized server-side so the client label can never drift
+  // out of the registry contract the webhook consumes.
+  const label = String(body.purpose || '').trim();
+  const purpose = normalizePurpose(label);
+
+  // Server-side amount — never trusts body.amount for bookings or Pro.
+  let chargeAmount;
+  let creatorId = null;
+  if (purpose === 'pro_subscription') {
+    // Fixed server constant; any client-sent amount is ignored.
+    chargeAmount = PRO_SUBSCRIPTION_PRICE_INR;
+  } else if (purpose === 'wallet_topup') {
+    const amt = Number(body.amount);
+    if (!Number.isFinite(amt) || amt < 100 || amt > 100000)
+      return json(res, 400, { error: 'bad_amount', detail: 'Top-up must be between Rs.100 and Rs.1,00,000.' });
+    chargeAmount = Math.round(amt * 100) / 100;
+  } else {
+    // booking_payment: recompute the canonical total from the creator's
+    // rate card. The client only names the creator + package price; the
+    // server verifies and prices the order.
+    creatorId = String(body.creatorId || '').slice(0, 64);
+    const creatorPrice = Number(body.creatorPrice);
+    if (!creatorId) return json(res, 400, { error: 'missing_creator' });
+    if (!Number.isFinite(creatorPrice) || creatorPrice <= 0 || creatorPrice > 10000000)
+      return json(res, 400, { error: 'bad_creator_price' });
+    let creatorSnap;
+    try { creatorSnap = await db.collection('creators').doc(creatorId).get(); }
+    catch { return json(res, 500, { error: 'creator_lookup_failed' }); }
+    const listed = listedPrices(creatorSnap.exists ? creatorSnap.data() : null);
+    // Creators with no rate card get a computed floor price client-side —
+    // accept rather than false-reject, mirroring /api/booking-create.
+    if (listed.length > 0 && !listed.some((p) => Math.abs(p - creatorPrice) <= 1))
+      return json(res, 400, { error: 'creator_price_mismatch' });
+    let isPro = false;
+    try {
+      const bizSnap = await db.collection('businesses').doc(uid).get();
+      isPro = isProActiveBiz(bizSnap.exists ? bizSnap.data() : null);
+    } catch { return json(res, 500, { error: 'brand_lookup_failed' }); }
+    chargeAmount = canonicalTotal(isPro, creatorPrice).total;
+    if (!(chargeAmount > 0)) return json(res, 400, { error: 'bad_total' });
+  }
 
   const customer = body.customer || {};
   const orderId = 'cf_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
-  // Item 2: wallet top-ups are tagged so the webhook can tell them apart from
-  // booking payments. Callers pass purpose:'wallet_topup' (+ amount); the tag
-  // is persisted in the payment_orders registry below and consumed by
-  // /api/cashfree-webhook. Other callers keep passing their label string.
-  const purpose = String(body.purpose || '').trim().slice(0, 64) || 'booking_payment';
+  const orderAmount = Math.round(chargeAmount * 100) / 100;
 
   try {
     const cfRes = await fetch(base(env) + '/orders', {
@@ -66,7 +122,7 @@ export default async function handler(req, res) {
       },
       body: JSON.stringify({
         order_id: orderId,
-        order_amount: Math.round(amount * 100) / 100,
+        order_amount: orderAmount,
         order_currency: 'INR',
         customer_details: {
           customer_id: uid, // Use verified Firebase UID, not client-provided
@@ -74,11 +130,15 @@ export default async function handler(req, res) {
           customer_phone: String(customer.phone || '9999999999').replace(/\D/g, '').slice(-10) || '9999999999',
         },
         order_meta: {
-          return_url: body.returnUrl || 'https://gocolllancer.vercel.app/payment/return?order_id=' + orderId,
+          // Server-pinned: client-supplied return_url / notify_url are ignored
+          // (a caller-controlled notify_url would route webhooks elsewhere).
+          return_url: APP_URL + '/payment/return?order_id=' + orderId,
           // Server webhook for the paid-but-tab-closed case (api/cashfree-webhook).
-          notify_url: body.notifyUrl || (APP_URL + '/api/cashfree-webhook'),
+          notify_url: APP_URL + '/api/cashfree-webhook',
         },
-        order_note: String(body.note || body.label || (purpose === 'wallet_topup' ? 'Collancer wallet top-up' : (body.purpose || 'Collancer payment'))).slice(0, 200),
+        order_note: String(body.label || (purpose === 'wallet_topup' ? 'Collancer wallet top-up'
+          : purpose === 'pro_subscription' ? 'Collancer Business Pro subscription (Rs.' + PRO_SUBSCRIPTION_PRICE_INR + ')'
+          : (label || 'Collancer payment'))).slice(0, 200),
       }),
     });
     const data = await cfRes.json().catch(() => ({}));
@@ -94,8 +154,9 @@ export default async function handler(req, res) {
       const { getAdmin } = await import('../lib/firebaseAdmin.js');
       const { FieldValue } = await import('firebase-admin/firestore');
       await getAdmin().firestore().collection('payment_orders').doc(orderId).set({
-        uid, amount: Math.round(amount * 100) / 100, currency: 'INR',
-        purpose, // 'wallet_topup' tags a wallet credit; booking payments carry their label
+        uid, amount: orderAmount, currency: 'INR',
+        purpose, // 'wallet_topup' | 'pro_subscription' | 'booking_payment' (normalized above)
+        creatorId, // booking orders only (null otherwise)
         status: 'created', bookingId: null,
         customerEmail: String(customer.email || 'noreply@collancer.in').slice(0, 128),
         cashfreeEnv: env, createdAt: FieldValue.serverTimestamp(),
@@ -109,6 +170,10 @@ export default async function handler(req, res) {
       payment_session_id: data.payment_session_id,
       order_id: data.order_id,
       order_status: data.order_status,
+      // Server-computed charge (the caller must verify against THIS, not its
+      // own client-side total).
+      order_amount: orderAmount,
+      purpose,
       env,
     });
   } catch (e) {
