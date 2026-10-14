@@ -5,8 +5,8 @@
  * app secret, pulls the Instagram profile + insights, stores everything via
  * the Firebase Admin SDK, and redirects back into the app.
  *
- * Success -> 302 to https://collancer-app.vercel.app/?ig=connected
- * Failure -> 302 to https://collancer-app.vercel.app/?ig=error=<reason>
+ * Success -> 302 to ${APP_URL}/?ig=connected  (APP_URL env, defaults to https://gocolllancer.vercel.app)
+ * Failure -> 302 to ${APP_URL}/?ig=error=<reason>
  */
 import { getAdmin } from '../lib/firebaseAdmin.js';
 import { buildInstagramObject } from '../lib/instagramSync.js';
