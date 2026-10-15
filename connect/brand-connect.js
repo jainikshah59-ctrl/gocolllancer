@@ -361,7 +361,8 @@ function loadCreators() {
       if (d.banned) return;
       arr.push(mapCreator(doc));
     });
-    arr.sort(function (a, b) { return (b._followers || 0) - (a._followers || 0); });
+    // Note: no pre-sort here — listHTML() applies the user's chosen sort
+    // (default 'recommended': engagement-weighted, nano/micro-friendly).
     try {
       C.length = 0;
       arr.forEach(function (c) { C.push(c); });
@@ -373,10 +374,9 @@ function loadCreators() {
       if (S.route === 'discover' || S.route === 'profile') render();
     } catch (e) {}
   };
-  // public read; orderBy may need index -> fallback without
-  track(col.orderBy('followers', 'desc').limit(60).onSnapshot(apply, function () {
-    track(col.limit(60).onSnapshot(apply, function () {}));
-  }));
+  // public read; fetch without follower-order so nano/micro creators are included.
+  // Sorting happens client-side in listHTML() (recommended/engagement/followers/price).
+  track(col.limit(200).onSnapshot(apply, function () {}));
   // live search filter is already in the app (#q); category filter via data-a="cat"
 }
 
