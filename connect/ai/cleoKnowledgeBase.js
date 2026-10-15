@@ -100,7 +100,7 @@ const EXPANSION = [
     id: 'brand-pro-benefits',
     category: 'brand-onboarding',
     title: 'What does Business Pro give a brand?',
-    answer: 'Business Pro gives 5% off the creator price on every booking, plus a premium gold theme across the app. Plans: Monthly ₹799, 6 Months ₹3,894 (save 19%), Annual ₹5,988 (best value). Pro status is checked live and revoked automatically on expiry.',
+    answer: 'Business Pro gives 5% off the creator price on every paid booking (the 12% platform fee is then calculated on the discounted price). Plan: Monthly \u20B9999, cancel anytime. A single \u20B920,000 booking saves you over \u20B91,000. Pro status is checked live and revoked automatically on expiry.',
     tags: ['pro', 'business pro', 'discount', '5%', 'benefits', 'subscription'],
     audience: 'brand',
     aliases: ['pro', 'subscription', 'discount'],

@@ -12,10 +12,26 @@
   storageBucket: 'collancer-8fd62.firebasestorage.app',
   messagingSenderId: '154521281878',
   appId: '1:154521281878:web:ae6439817888eedd6ce2f7',
+  /* INSIGHT-1 (Cycle 17): Firebase Analytics measurement ID.
+   * Get this from Firebase console > Project settings > Your apps > Web app.
+   * Format: 'G-XXXXXXXXXX'. Leave as null to keep analytics disabled. */
+  measurementId: null,
 };
   firebase.initializeApp(cfg);
   var auth = firebase.auth();
   var db = firebase.firestore();
+
+  /* Initialize Firebase Analytics if measurementId is configured.
+   * Fail-safe: analytics is best-effort, never blocks app init. */
+  var analyticsReady = false;
+  try {
+    if (cfg.measurementId && typeof cfg.measurementId === 'string' &&
+        cfg.measurementId.indexOf('G-') === 0 && typeof firebase.analytics === 'function') {
+      firebase.analytics();
+      analyticsReady = true;
+      window._analyticsReady = true;
+    }
+  } catch (e) { /* analytics unavailable — track() will no-op */ }
 
   function currentUser() { return auth.currentUser || null; }
   function onAuth(cb) { return auth.onAuthStateChanged(cb); }
@@ -46,6 +62,7 @@
   window.FB = {
     auth: auth, db: db,
     user: currentUser, onAuth: onAuth, idToken: idToken, api: api,
+    analyticsReady: function () { return analyticsReady; },
     registerEmail: function (email, pw) { return auth.createUserWithEmailAndPassword(email, pw); },
     loginEmail: function (email, pw) { return auth.signInWithEmailAndPassword(email, pw); },
     loginGoogle: function () {

@@ -22,7 +22,8 @@
  */
 import { getAdmin, verifyUid, readBody } from '../lib/firebaseAdmin.js';
 import { FieldValue } from 'firebase-admin/firestore';
-import { isProActiveBiz } from '../lib/pricing.js';
+import { isProActiveBiz, canonicalTotal } from '../lib/pricing.js';
+import { resolveRebookId } from '../lib/rebook.js';
 
 function json(res, code, obj) {
   res.statusCode = code;
@@ -80,37 +81,80 @@ export default async function handler(req, res) {
   // 30-day subscription expiry; the old inline check never expired).
   const isPro = isProActiveBiz(biz);
 
-  // (c) canonical pricing — computed server-side, never from the client.
-  // Business Pro = 5% off the CREATOR PRICE first, then 12% fee on the discounted price.
-  const discount = (!barter && isPro) ? Math.round(creatorPrice * 0.05) : 0;
-  const discounted = barter ? 0 : (creatorPrice - discount);
-  const fee = barter ? 0 : Math.round(discounted * 0.12);
-  const total = barter ? 0 : (discounted + fee);
+  // Item 8 (Cycle 17, FORGE): verify creatorPrice against the creator's
+  // listed package prices — mirrors the check in api/booking-create.js
+  // (C7#6). Without this, the wallet path was the last client-controlled
+  // pricing input: a tampered creatorPrice underpays the creator
+  // (brand-approve / auto-approve pays 95% of it). Barter bookings skip
+  // (no price to verify).
+  if (!barter) {
+    let creatorSnap = null;
+    try {
+      creatorSnap = await db.collection('creators').doc(creatorId).get();
+    } catch (e) {
+      return json(res, 500, { error: 'creator_lookup_failed' });
+    }
+    const cd = creatorSnap && creatorSnap.exists ? creatorSnap.data() : null;
+    const listed = [];
+    if (cd && cd.prices && typeof cd.prices === 'object') {
+      for (const k of Object.keys(cd.prices)) {
+        const v = cd.prices[k];
+        const n = Number(v);
+        if (Number.isFinite(n) && n > 0) listed.push(n);
+        else if (v && typeof v === 'object') {
+          for (const f of ['price', 'sale', 'amount', 'rate']) {
+            const m = Number(v[f]);
+            if (Number.isFinite(m) && m > 0) listed.push(m);
+          }
+        }
+      }
+    }
+    if (cd && Array.isArray(cd.packages)) {
+      for (const p of cd.packages) {
+        let m = NaN;
+        if (p && typeof p === 'object') {
+          m = Number(p.price != null ? p.price : (p.amount != null ? p.amount : p.rate));
+        } else {
+          m = Number(p);
+        }
+        if (Number.isFinite(m) && m > 0) listed.push(m);
+      }
+    }
+    // Creators with no rate card get a computed floor price client-side, so
+    // there is nothing server-side to verify against — accept rather than
+    // false-reject legitimate bookings.
+    if (listed.length > 0) {
+      const ok = listed.some((p) => Math.abs(p - creatorPrice) <= 1);
+      if (!ok) return json(res, 400, { error: 'creator_price_mismatch' });
+    } else {
+      console.warn('[book-with-wallet] no rate card for creator ' + creatorId + ' — price check skipped');
+    }
+  }
+
+  // (c) canonical pricing — computed server-side via lib/pricing.canonicalTotal,
+  // never from the client. Wallet is an internal transfer: no UPI MDR applies
+  // (MDR only hits gateway payments via /api/cashfree-order with paymentMethod='upi').
+  const pr = barter ? { discount: 0, fee: 0, upiMdr: 0, total: 0 }
+    : canonicalTotal(isPro, creatorPrice, { paymentMethod: 'wallet' });
+  const discount = pr.discount;
+  const fee = pr.fee;
+  const total = pr.total;
   if (!barter && !(total > 0)) return json(res, 400, { error: 'bad_total' });
 
   // (d) atomic transaction: balance check + debit + booking + ledger
   const bookingId = 'collab_' + fp;
   const now = new Date();
+  let finalBookingId = bookingId; // may become a suffixed rebook id (Item 2)
   try {
     await db.runTransaction(async (tx) => {
-      const bookRef = db.collection('bookings').doc(bookingId);
-      const bookSnap = await tx.get(bookRef);
-      if (bookSnap.exists) {
-        const existing = bookSnap.data() || {};
-        if (existing.status !== 'Cancelled') {
-          const e = new Error('A booking with this fingerprint already exists.');
-          e.code = 'DUPLICATE_BOOKING';
-          throw e;
-        }
-        // Item 2 (Cycle 16): never overwrite a Cancelled booking while its
-        // refund intent is unprocessed — the rebook would destroy the pending
-        // refund and the cancel audit trail. Fail closed on legacy docs.
-        if (existing.refundProcessed !== true) {
-          const e = new Error('This booking was cancelled with a pending refund. Wait for the refund to settle before rebooking.');
-          e.code = 'REBOOK_BLOCKED_PENDING_REFUND';
-          throw e;
-        }
-      }
+      // Item 2 (Cycle 16): rebook-safe id resolution (lib/rebook.js). A
+      // terminal doc (Completed, or Cancelled with settled refund) is NEVER
+      // overwritten — the rebook gets a suffixed id and the prior doc is
+      // archived into previousBookings. Non-terminal docs still 409
+      // (double-submit idempotency); Cancelled+pending-refund still 409.
+      const rb = await resolveRebookId(tx, db, bookingId);
+      finalBookingId = rb.bookingId;
+      const finalBookRef = db.collection('bookings').doc(finalBookingId);
       const bs = await tx.get(bizRef);
       const bal = Number((bs.data() || {}).walletBalance || 0);
       if (!barter && bal < total) {
@@ -159,13 +203,21 @@ export default async function handler(req, res) {
         paidAt: barter ? null : FieldValue.serverTimestamp(),
         createdAt: FieldValue.serverTimestamp(),
         updatedAt: FieldValue.serverTimestamp(),
+        // Item 2 (Cycle 16): rebook audit trail — archived prior
+        // lifecycle(s) of this collaboration. Never overwritten, only appended.
+        previousBookings: rb.previousBookings,
+        rebookOf: rb.rebookOf,
+        rebookAttempt: rb.rebookAttempt,
       };
-      tx.set(bookRef, doc);
-      // Ledger row — deterministic id so a retried request can never double-debit.
+      tx.set(finalBookRef, doc);
+      // Ledger row — deterministic id so a retried request can never
+      // double-debit. Derived from the FINAL booking id (Item 2): a rebook
+      // must not merge-overwrite the prior booking's deduction row.
+      const ledgerId = 'booking_' + finalBookingId.replace(/^collab_/, '');
       if (!barter) {
-        tx.set(db.collection('walletTransactions').doc('booking_' + fp), {
-          id: 'booking_' + fp, bizId: uid, type: 'booking_deduction',
-          amount: -total, bookingId, creatorId, creatorName: s(draft.creatorName, 120),
+        tx.set(db.collection('walletTransactions').doc(ledgerId), {
+          id: ledgerId, bizId: uid, type: 'booking_deduction',
+          amount: -total, bookingId: finalBookingId, creatorId, creatorName: s(draft.creatorName, 120),
           createdAt: FieldValue.serverTimestamp(),
         }, { merge: true });
       }
@@ -183,11 +235,11 @@ export default async function handler(req, res) {
     await db.collection('creatorNotifs').add({
       creatorId, type: 'booking_received', title: 'New collaboration request',
       body: (biz.bizName || 'A brand') + ' booked ' + (s(draft.campaignName, 120) || 'a campaign') + '.',
-      bookingId, read: false, createdAt: FieldValue.serverTimestamp(),
+      bookingId: finalBookingId, read: false, createdAt: FieldValue.serverTimestamp(),
     });
   } catch (e) {
     console.error('[book-with-wallet] creatorNotif', String(e && e.message || e).slice(0, 160));
   }
 
-  return json(res, 200, { bookingId, total, proDiscount: discount, platformFee: fee });
+  return json(res, 200, { bookingId: finalBookingId, total, proDiscount: discount, platformFee: fee });
 }

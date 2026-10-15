@@ -233,6 +233,20 @@
           "order": "ASCENDING"
         },
         {
+          "fieldPath": "refundRequested",
+          "order": "ASCENDING"
+        }
+      ],
+      "queryScope": "COLLECTION"
+    },
+    {
+      "collectionGroup": "bookings",
+      "fields": [
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        },
+        {
           "fieldPath": "reviewDeadline",
           "order": "ASCENDING"
         }

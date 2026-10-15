@@ -134,6 +134,20 @@ function friendlyAuthError(err) {
 var FB, DB, uid = null, bizDoc = null, unsubs = [];
 var origFinish = null, origPpay = null, origLo = null;
 
+/* INSIGHT-2: Admin check for founder dashboard.
+ * Reads admins/{uid} — rules allow get for owner or admin. */
+function checkAdminStatus(userId) {
+  if (!userId || !DB) return;
+  DB.collection('admins').doc(userId).get()
+    .then(function (snap) {
+      var isAdmin = snap.exists;
+      try { S.isAdmin = isAdmin; } catch (e) {}
+      // Re-render if on dashboard so the admin section appears
+      try { if (isAdmin && typeof render === 'function') render(); } catch (e) {}
+    })
+    .catch(function () { /* not admin or no access — stay non-admin */ });
+}
+
 function track(u) { if (u) unsubs.push(u); }
 function teardown() {
   unsubs.forEach(function (u) { try { u(); } catch (e) {} });
@@ -153,6 +167,8 @@ function init() {
     if (!u) { teardown(); return; } // auth gate stays visible
     uid = u.uid;
     afterLogin(u);
+    /* INSIGHT-2: check admin status for founder dashboard access */
+    checkAdminStatus(u.uid);
   });
   // returning Firebase session: run the app's own post-auth hook so the gate hides
   var n = 0;
@@ -246,8 +262,11 @@ function ensureBusinessDoc(u, email, bizName, extra) {
        *     amount: 999 }
        * Legacy free Pro (isPro && proActive) is grandfathered; new Pro
        * activations go through the "Go Pro" button (Cashfree order with
-       * purpose 'pro_subscription'). Null until the first paid activation. */
-      proSubscription: null,
+       * purpose 'pro_subscription'). The field is stamped server-side by the
+       * Cashfree webhook after a verified payment (firestore.rules deny
+       * client writes of Pro state and the create whitelist has no
+       * proSubscription key) — so the client must NOT write it, not even
+       * as null, or the whole doc create is rejected. */
       createdAt: FB.serverStamp(),
     };
     if (extra) {
@@ -255,7 +274,10 @@ function ensureBusinessDoc(u, email, bizName, extra) {
       if (extra.industry) doc.industry = extra.industry;
       if (extra.address) doc.address = extra.address;
     }
-    return ref.set(doc).catch(function () { /* admin-gated: locked for now */ });
+    return ref.set(doc).then(function () {
+      /* INSIGHT-1: analytics — new brand signup completed */
+      try { if (typeof window.track === 'function') window.track('signup_completed', { role: 'brand' }); } catch (e) {}
+    }).catch(function () { /* admin-gated: locked for now */ });
   }).catch(function () { /* admin-gated read: locked for now */ });
 }
 
@@ -331,6 +353,11 @@ function mapCreator(doc) {
   }
   var low = pk.length ? Math.min.apply(null, pk.map(function (p) { return p[2]; })) : 0;
   var high = pk.length ? Math.max.apply(null, pk.map(function (p) { return p[2]; })) : 0;
+  /* SCOUT item #1 (Cycle 18): the brand UI (card(), listHTML() filters/search,
+   * profile view) reads c.plat / c.niche / c.city WITHOUT underscore — the
+   * demo-data shape. Real Firestore docs map to underscored fields above.
+   * Expose BOTH shapes so real creators render correctly everywhere. */
+  var _niche = d.niche || '', _city = d.city || '', _platform = d.platform || 'Instagram';
   return {
     id: doc.id,
     name: d.name || 'Creator',
@@ -342,12 +369,15 @@ function mapCreator(doc) {
     likes: fmtCount(ins.avgLikes || 0),
     conv: pk.length ? (inr(low) + ' \u2013 ' + inr(high)) : '—',
     pk: pk,
+    /* Demo-shaped aliases (no underscore) — required by card/listHTML/profile */
+    plat: _platform, niche: _niche, city: _city,
+    /* Underscored canonical fields — used by sorts, filters, cmin() */
     _hasPrices: pk.length > 0,
     _minPrice: low,
     _followers: followers,
     _engagement: Number(ig.engagementRate || d.engagementRate || 0),
-    _niche: d.niche || '', _city: d.city || '',
-    _platform: d.platform || 'Instagram',
+    _niche: _niche, _city: _city,
+    _platform: _platform,
     _pfp: ig.profilePicUrl || d.pfp || '',
     portfolio: Array.isArray(d.portfolioMediaIds) ? d.portfolioMediaIds.filter(function (u) { return typeof u === 'string' && u; }).slice(0, 6) : [],
   };
@@ -482,6 +512,8 @@ function notifyCreator(creatorId, bookingId, title, body) {
   return Promise.resolve(null);
 }
 function uiBookingDone(realId, methodLabel) {
+  /* INSIGHT-1: analytics — payment succeeded (booking created) */
+  try { if (typeof window.track === 'function') window.track('payment_succeeded', { method: String(methodLabel || 'unknown') }); } catch (e) {}
   try { origFinish(methodLabel); } catch (e) {}
   try {
     if (S.bookings && S.bookings[0]) S.bookings[0].oid = realId;
@@ -498,6 +530,8 @@ function wireActions() {
     var v = t.dataset.v;
     S.cid = (v != null && v !== '' && isNaN(+v)) ? v : +v;
     S.ptab = 'Overview';
+    /* INSIGHT-1: analytics — creator profile viewed */
+    try { if (typeof window.track === 'function') window.track('profile_viewed', { creator_id: String(S.cid) }); } catch (e) {}
     go('profile');
   };
   A.book = function (t) {
@@ -841,11 +875,22 @@ function reviewBooking(bookingId, decision, note, evidence) {
   bookingId = String(bookingId || '');
   var key = bookingId + ':' + String(decision || '');
   if (reviewInFlight[key]) { toast('This action is already being processed.'); return undefined; }
-  if (decision === 'approve') {
+  /* Item 20 (Cycle 17): approve uses the in-app confirm sheet instead of
+   * native confirm(). The dialog is async — continue the flow in .then(). */
+  var startApprove = function () {
+    if (typeof window.collancerConfirm === 'function') {
+      return window.collancerConfirm({
+        title: 'Approve this work?',
+        sub: 'This completes the booking and the creator can then request their payout.',
+        okLabel: 'Approve work',
+      }).then(function (ok) { if (ok) return doReview(); return undefined; });
+    }
     var ok = false;
     try { ok = confirm('Approve this work? This completes the booking and the creator can then request their payout.'); } catch (e) {}
     if (!ok) return undefined;
-  }
+    return doReview();
+  };
+  var doReview = function () {
   reviewInFlight[key] = true;
   var release = function () { try { delete reviewInFlight[key]; } catch (e) {} };
   var ref = DB.collection('bookings').doc(bookingId);
@@ -915,6 +960,10 @@ function reviewBooking(bookingId, decision, note, evidence) {
     else if (m === 'bad_decision') toast('Invalid review decision.');
     else toast('Could not update booking. Please try again.');
   }).then(function () { release(); }, function () { release(); });
+  }; // end doReview
+  // Dispatch: approve goes through the in-app confirm; revision/dispute run directly.
+  if (decision === 'approve') return startApprove();
+  return doReview();
 }
 try { window.collancerReviewBooking = reviewBooking; } catch (e) {}
 
@@ -986,16 +1035,36 @@ try { window.collancerCancelBooking = cancelBooking; } catch (e) {}
  * existing dialog pattern. */
 function cancelBookingDialog(bookingId) {
   var id = String(bookingId || '');
+  /* Item 20 (Cycle 17): in-app sheets replace native prompt()/confirm().
+   * Falls back to native only if the dialog helpers are unavailable. */
+  var useNative = typeof window.collancerConfirm !== 'function' || typeof window.collancerPrompt !== 'function';
   var proceed = function () {
-    var rs = '';
-    try { rs = prompt('Reason for cancellation (optional)', '') || ''; } catch (e) {}
-    if (window.collancerCancelBooking) window.collancerCancelBooking(id, rs);
-    else toast('Cancel service is loading. Please try again.');
+    if (useNative) {
+      var rs = '';
+      try { rs = prompt('Reason for cancellation (optional)', '') || ''; } catch (e) {}
+      if (window.collancerCancelBooking) window.collancerCancelBooking(id, rs);
+      else toast('Cancel service is loading. Please try again.');
+      return;
+    }
+    window.collancerPrompt({
+      title: 'Cancellation reason', sub: 'Optional — helps us improve.',
+      placeholder: 'Reason for cancellation (optional)', multiline: true, okLabel: 'Confirm cancellation',
+    }).then(function (rs) {
+      if (rs == null) return;
+      if (window.collancerCancelBooking) window.collancerCancelBooking(id, rs);
+      else toast('Cancel service is loading. Please try again.');
+    });
   };
-  var ask = function (msg) {
-    var ok = false;
-    try { ok = confirm(msg); } catch (e) {}
-    if (ok) proceed();
+  var ask = function (title, sub) {
+    if (useNative) {
+      var ok = false;
+      try { ok = confirm(title + (sub ? '\n\n' + sub : '')); } catch (e) {}
+      if (ok) proceed();
+      return;
+    }
+    window.collancerConfirm({ title: title, sub: sub, okLabel: 'Yes, cancel' }).then(function (ok) {
+      if (ok) proceed();
+    });
   };
   DB.collection('bookings').doc(id).get().then(function (snap) {
     if (!snap.exists) { toast('Booking not found.'); return; }
@@ -1007,11 +1076,12 @@ function cancelBookingDialog(bookingId) {
     var rf = cancelRefundFields(d);
     if (rf) {
       var fee = Math.max(0, Number(d.paidAmount || 0) - rf.refundAmount);
-      ask(d.status === 'Pending'
-        ? 'Cancel this booking?\n\nYou will be refunded ' + inr(rf.refundAmount) + ' (full amount).'
-        : 'Cancel this booking?\n\nYou will be refunded ' + inr(rf.refundAmount) + ' (' + inr(fee) + ' platform fee retained).');
+      ask('Cancel this booking?',
+        d.status === 'Pending'
+          ? 'You will be refunded ' + inr(rf.refundAmount) + ' (full amount).'
+          : 'You will be refunded ' + inr(rf.refundAmount) + ' (' + inr(fee) + ' platform fee retained).');
     } else {
-      ask('Cancel this booking?\n\nNo payment to refund (barter or unpaid booking).');
+      ask('Cancel this booking?', 'No payment to refund (barter or unpaid booking).');
     }
   }).catch(function () { ask('Cancel this booking?'); });
 }
@@ -1108,10 +1178,8 @@ function maybeDeepLinkProfile() {
       snap.forEach(function (d) { if (!doc) doc = d; });
       if (!doc) { toast('Creator not found.'); return; }
       var c = mapCreator(doc);
-      // profile() view reads demo-shaped fields plat/niche/city
-      c.plat = c._platform || 'Instagram';
-      c.niche = c._niche || '';
-      c.city = c._city || '';
+      /* mapCreator() already exposes both field shapes (plat/niche/city
+       * aliases + underscored canonicals) — no fixup needed here. */
       try { window._deepCreator = c; } catch (e) {}
       try {
         var i = -1;
@@ -1467,5 +1535,33 @@ function disputeFraud() {
     .catch(function () { if (el) el.textContent = ''; });
 }
 try { window.collancerDisputeFraud = disputeFraud; } catch (e) {}
+
+/* ---------------- notification history (Item 9, Cycle 18) ---------------- */
+/* Bell button in the brand header: fetch last 20 bizNotifs for history view. */
+function getBizNotifHistory() {
+  if (!DB || !uid) return Promise.resolve([]);
+  return DB.collection('bizNotifs').where('bizId', '==', uid)
+    .orderBy('createdAt', 'desc').limit(20).get()
+    .then(function (snap) {
+      var arr = [];
+      snap.forEach(function (doc) {
+        var d = doc.data() || {};
+        arr.push({ title: d.title || 'Notification', body: d.body || '', read: !!d.read });
+      });
+      return arr;
+    })
+    .catch(function () { return []; });
+}
+try { window.collancerGetBizNotifHistory = getBizNotifHistory; } catch (e) {}
+
+/* Brand logout: sign out and return to role picker. */
+function brandLogout() {
+  if (!FB) return;
+  FB.logout().then(function () {
+    try { parent.postMessage('collancer:switch', '*'); } catch (e) {}
+    try { location.reload(); } catch (e2) {}
+  }).catch(function () {});
+}
+try { window.collancerBrandLogout = brandLogout; } catch (e) {}
 
 })();

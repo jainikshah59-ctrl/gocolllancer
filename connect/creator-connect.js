@@ -166,6 +166,81 @@ function loadCreatorNotifications() {
     }, function () {}));
 }
 
+/* ---------------- bell & menu (Item 9, Cycle 18) ---------------- */
+/* Bottom sheet helper — 3D black-button design language, no new design. */
+function cconSheet(title, sub, bodyHtml) {
+  var old = $('#ccon-sheet');
+  if (old) old.remove();
+  var ov = document.createElement('div');
+  ov.id = 'ccon-sheet';
+  ov.style.cssText = 'position:fixed;inset:0;z-index:99998;display:flex;align-items:flex-end;justify-content:center;';
+  ov.innerHTML =
+    '<div data-ccon-close style="position:absolute;inset:0;background:rgba(11,18,23,.45)"></div>'
+    + '<div style="position:relative;width:100%;max-width:390px;max-height:82vh;overflow-y:auto;background:#fff;border-radius:28px 28px 0 0;padding:14px 20px calc(28px + env(safe-area-inset-bottom,0px));box-shadow:0 -12px 40px rgba(0,0,0,.18)">'
+    + '<div style="width:36px;height:4.5px;border-radius:2.5px;background:rgba(15,40,60,.18);margin:0 auto 12px"></div>'
+    + '<div style="display:flex;align-items:center;gap:10px;margin-bottom:4px"><div style="flex:1">'
+    + '<div style="font-size:21px;font-weight:800;letter-spacing:-.3px">' + esc(title) + '</div>'
+    + (sub ? '<div style="font-size:13px;color:#55616d;margin-top:2px">' + esc(sub) + '</div>' : '')
+    + '</div><button type="button" data-ccon-close aria-label="Close" style="width:38px;height:38px;flex:none;border-radius:50%;border:1px solid rgba(15,40,60,.12);background:rgba(255,255,255,.7);font-size:18px;font-weight:800;cursor:pointer;color:#0b1217">✕</button></div>'
+    + '<div style="margin-top:12px">' + bodyHtml + '</div></div>';
+  document.body.appendChild(ov);
+  ov.addEventListener('click', function (e) {
+    if (e.target.closest('[data-ccon-close]')) { ov.remove(); }
+  });
+}
+function cconCloseSheet() { var ov = $('#ccon-sheet'); if (ov) ov.remove(); }
+
+/* Bell: notification history from creatorNotifs. */
+function showCreatorNotifHistory() {
+  cconSheet('Notifications', 'Your latest updates from Collancer.',
+    '<div style="text-align:center;padding:20px 0;font-size:13.5px;color:#8a94a0">Loading…</div>');
+  DB.collection('creatorNotifs').where('creatorId', '==', uid)
+    .orderBy('createdAt', 'desc').limit(20).get()
+    .then(function (snap) {
+      var html = '';
+      snap.forEach(function (doc) {
+        var d = doc.data() || {};
+        html += '<div style="border:1px solid rgba(15,40,60,.1);border-radius:16px;padding:12px 16px;margin-bottom:10px;background:#fff">'
+          + '<div style="font-size:14.5px;font-weight:800">' + esc(d.title || 'Notification') + '</div>'
+          + (d.body ? '<div style="font-size:13.5px;color:#55616d;margin-top:4px;line-height:1.45">' + esc(d.body) + '</div>' : '')
+          + '</div>';
+      });
+      if (!html) html = '<div style="text-align:center;padding:20px 0;font-size:13.5px;color:#8a94a0">No notifications yet.<br>Booking updates will appear here.</div>';
+      var ov = $('#ccon-sheet');
+      if (ov) { var body = ov.querySelector('div[style*="margin-top:12px"]'); if (body) body.innerHTML = html; }
+    })
+    .catch(function () {
+      var ov = $('#ccon-sheet');
+      if (ov) { var body = ov.querySelector('div[style*="margin-top:12px"]'); if (body) body.innerHTML = '<div style="text-align:center;padding:20px 0;font-size:13.5px;color:#8a94a0">Could not load notifications.</div>'; }
+    });
+}
+
+/* Menu: quick navigation + help + logout. */
+function showCreatorMenu() {
+  var btn3d = 'display:block;width:100%;height:44px;border-radius:22px;font-size:14.5px;font-weight:800;cursor:pointer;margin-bottom:10px;border:1px solid #000;color:#fff;background:linear-gradient(180deg,#3a3d44 0,#16181c 46%,#000 100%);box-shadow:0 0 0 1px rgba(255,255,255,.6),0 2px 0 1px #98a1ab;';
+  cconSheet('Menu', '',
+    '<button type="button" data-cm="home" style="' + btn3d + '">Home</button>'
+    + '<button type="button" data-cm="earnings" style="' + btn3d + '">Earnings</button>'
+    + '<button type="button" data-cm="profile" style="' + btn3d + '">Edit profile</button>'
+    + '<button type="button" data-cm="help" style="' + btn3d + '">Help &amp; support</button>'
+    + '<button type="button" data-cm="logout" style="' + btn3d + 'background:#dc2626;">Log out</button>');
+  var ov = $('#ccon-sheet');
+  if (!ov) return;
+  ov.addEventListener('click', function (e) {
+    var b = e.target.closest('[data-cm]');
+    if (!b) return;
+    var k = b.getAttribute('data-cm');
+    cconCloseSheet();
+    if (k === 'logout') {
+      FB.logout().then(function () { try { Collancer.go('login'); } catch (x) {} });
+    } else if (k === 'help') {
+      toast('Need help? Email support@collancer.in — we reply within 24 hours.');
+    } else {
+      try { Collancer.go(k); } catch (x) {}
+    }
+  });
+}
+
 /* ---------------- auth ---------------- */
 function isRegisterMode() {
   var seg = $('#s-login #seg');
@@ -199,11 +274,14 @@ function ensureCreatorDoc(u, email) {
         pfp: '', bio: '', niche: '', city: '', platform: 'Instagram',
         prices: {}, followers: 0, engagement: 0,
         verified: false, addedToCollancer: false, banned: false,
-        verificationStatus: 'none', rating: 0, profileComplete: false,
+        rating: 0, profileComplete: false,
         createdAt: FB.serverStamp(),
       }).then(function () {
         return DB.collection('creators').doc(u.uid).collection('private').doc('contact').set({
           email: email, phone: '', updatedAt: FB.serverStamp(),
+        }).then(function () {
+          /* INSIGHT-1: analytics — new creator signup completed */
+          try { if (typeof track === 'function') track('signup_completed', { role: 'creator' }); } catch (e) {}
         });
       });
     });
@@ -337,12 +415,31 @@ function wireEvents() {
      * so it was a silent dead button. Show the message instead of nothing. */
     var dt = t.closest('[data-toast]');
     if (dt) { e.stopPropagation(); e.preventDefault(); toast(dt.getAttribute('data-toast')); return; }
+    /* Item 9 (Cycle 18): wire dead bell & menu buttons in creator header. */
+    if (q('#s-home button[aria-label="Notifications"]')) { e.stopPropagation(); e.preventDefault(); showCreatorNotifHistory(); return; }
+    if (q('#s-home button[aria-label="Menu"]')) { e.stopPropagation(); e.preventDefault(); showCreatorMenu(); return; }
     if (q('#s-login #sb')) { e.stopPropagation(); e.preventDefault(); doEmailAuth(); return; }
     var sbtn = q('#s-login .sbtn');
     if (sbtn && !/phone/i.test(sbtn.textContent)) { e.stopPropagation(); e.preventDefault(); doGoogle(); return; }
     if (q('#s-profile .black.red')) {
       e.stopPropagation(); e.preventDefault();
       FB.logout().then(function () { try { Collancer.go('login'); } catch (x) {} });
+      return;
+    }
+    /* Item 14 (DESI, Cycle 18): DPDP data deletion request from creator profile. */
+    var cdel = q('[data-cdel]');
+    if (cdel) {
+      e.stopPropagation(); e.preventDefault();
+      if (!confirm('Request deletion of your account and all personal data?\n\nThis deletes your profile, contact info, portfolio, packages, booking history, and notifications. Wallet records are settled first. Our team processes requests within 30 days (DPDP Act, 2023).')) return;
+      try {
+        var au = FB.auth && FB.auth.currentUser;
+        if (!au) { toast('Please log in to request deletion.'); return; }
+        FB.db.collection('deletionRequests').add({
+          uid: au.uid, email: au.email || '',
+          status: 'pending', createdAt: FB.serverStamp()
+        }).then(function(){ toast('Deletion request submitted. We\u2019ll process it within 30 days.'); })
+          .catch(function(){ toast('Could not submit. Email support@collancer.in.'); });
+      } catch (x) { toast('Could not submit. Please try again.'); }
       return;
     }
     var igBtn = q('button.black');
@@ -501,7 +598,12 @@ function paintChecklist() {
   if (!rows || !creatorDoc) return;
   var d = creatorDoc;
   var hasPrices = !!((d.prices && Object.keys(d.prices).length) || (d.packages && d.packages.length));
-  var hasPortfolio = !!((d.featuredMediaIds && d.featuredMediaIds.length) || (d.portfolio && d.portfolio.length));
+  /* Item 16 fix: portfolio pins are stored in `portfolioMediaIds` (Item 12's
+   * save writes that field). The old check looked at `featuredMediaIds` /
+   * `portfolio`, which nothing ever writes, so this step could never complete.
+   * Legacy fallbacks kept so any old docs still count. */
+  var hasPortfolio = !!((d.portfolioMediaIds && d.portfolioMediaIds.length) ||
+    (d.featuredMediaIds && d.featuredMediaIds.length) || (d.portfolio && d.portfolio.length));
   var steps = [
     { label: 'Connect Instagram', done: !!(d.instagram && d.instagram.username) },
     { label: 'Pin portfolio posts', done: hasPortfolio },
@@ -560,6 +662,31 @@ function storeReferral() {
     }, { merge: true });
   } catch (e) {}
 }
+
+/* Invite & Earn (GROWTH item 4): expose the creator's referral link + stats
+ * to the inline tools-screen script via window.CollancerReferral. */
+function referralLink() {
+  var h = '';
+  try { h = String((creatorDoc && (creatorDoc.handleLower || creatorDoc.handle)) || '').toLowerCase().trim(); } catch (e) {}
+  if (!h) return null;
+  return location.origin + '/?ref=' + encodeURIComponent(h);
+}
+function referralStats() {
+  // Query by creatorId only (indexed) and filter kind client-side — avoids a
+  // new composite index. Counts referral_credit payouts for this creator.
+  if (!uid || !DB) return Promise.resolve({ count: 0, earned: 0 });
+  return DB.collection('payoutRequests').where('creatorId', '==', uid).get().then(function (snap) {
+    var count = 0, earned = 0;
+    snap.forEach(function (doc) {
+      var d = doc.data() || {};
+      if (d.kind === 'referral_credit') { count++; earned += Number(d.amount) || 0; }
+    });
+    return { count: count, earned: earned };
+  }).catch(function () { return { count: 0, earned: 0 }; });
+}
+try {
+  window.CollancerReferral = { getLink: referralLink, getStats: referralStats };
+} catch (e) {}
 function profileCompleteness() {
   if (!creatorDoc) return 29;
   var d = creatorDoc, score = 10;
@@ -933,12 +1060,27 @@ function paintPayoutHistory() {
 function eligiblePayoutBookings() {
   // Completed bookings with no payout doc yet (server auto-release or a
   // previous request covers the rest).
+  // Item 11 (Cycle 17, LEDGER): also surface server-queued payouts that are
+  // missing destination info (no UPI/bank details) — the brand-approve and
+  // cron auto-approve paths queue payout_{bookingId} via Admin SDK without
+  // destination fields, and previously the creator had no path to add them,
+  // so those payouts stalled in the admin queue. Flagged needsDetails so the
+  // picker + submit flow can add destination fields via the scoped rules
+  // update (method/upi/holder/account/ifsc only).
   return DB.collection('bookings').where('creatorId', '==', uid).get().then(function (snap) {
     var done = {};
+    var needsDetails = {};
     return DB.collection('payoutRequests').where('creatorId', '==', uid).get().then(function (ps) {
       ps.forEach(function (d) {
         var b = d.data() || {};
-        if (b.bookingId) done[b.bookingId] = true;
+        if (!b.bookingId) return;
+        // Only payout_ docs are creator-actionable here: killfee_* and ref_*
+        // docs share this collection but are admin/referral flows, never
+        // Completed-booking payouts the creator should add details to.
+        if (d.id.indexOf('payout_') !== 0) { done[b.bookingId] = true; return; }
+        var hasDest = (b.upi && String(b.upi).trim()) || (b.account && String(b.account).trim());
+        if (hasDest || b.status !== 'pending') done[b.bookingId] = true;
+        else needsDetails[b.bookingId] = d.id; // pending payout, no destination
       });
       var arr = [];
       snap.forEach(function (d) {
@@ -949,6 +1091,8 @@ function eligiblePayoutBookings() {
         arr.push({
           id: d.id, creatorPrice: Number(b.creatorPrice || 0), amount: share,
           campaign: b.campaignName || '', biz: b.bizName || '',
+          needsDetails: !!needsDetails[d.id],
+          payoutDocId: needsDetails[d.id] || null,
         });
       });
       return arr;
@@ -971,7 +1115,7 @@ function renderPayoutPicker(list) {
         '<div><div style="font-size:15px;font-weight:800">' + inr(b.amount) + '</div>' +
         '<div style="font-size:12px;color:#55616d;margin-top:2px">' + esc(b.campaign || 'Collaboration') +
         (b.biz ? ' \u00B7 ' + esc(b.biz) : '') + '</div></div>' +
-        '<button class="black" data-pick="' + i + '" style="min-width:96px;height:42px;border-radius:21px">Request</button>' +
+        '<button class="black" data-pick="' + i + '" style="min-width:96px;height:42px;border-radius:21px">' + (b.needsDetails ? 'Add UPI' : 'Request') + '</button>' +
         '</div></div>';
     }).join('');
   $all('[data-pick]', wrap).forEach(function (btn) {
@@ -1010,6 +1154,24 @@ function continuePayout(b) {
     dest = { method: 'bank', holder: hn, account: an, ifsc: ifs };
   }
   erEl.textContent = 'Submitting payout request\u2026';
+  // Item 11 (Cycle 17, LEDGER): the payout doc may already exist — queued by
+  // the server on brand-approve / cron auto-approve without destination
+  // fields. In that case UPDATE only the destination fields (the scoped
+  // firestore.rules update branch allows exactly method/upi/holder/account/
+  // ifsc on the creator's own pending payouts; amount/status stay immutable).
+  if (b.needsDetails && b.payoutDocId) {
+    DB.collection('payoutRequests').doc(b.payoutDocId).update({
+      method: dest.method, upi: dest.upi || '', holder: dest.holder || '',
+      account: dest.account || '', ifsc: dest.ifsc || '',
+    }).then(function () {
+      erEl.textContent = '';
+      if (amtEl) amtEl.value = '';
+      root._payoutPick = null;
+      toast('Payout details saved.');
+      paintEarnings();
+    }).catch(function () { erEl.textContent = 'Could not save. Please try again.'; });
+    return;
+  }
   // Rule-safe shape: deterministic id payout_{bookingId}, exact canonical
   // amount, bookingId + creatorId + status pending.
   DB.collection('payoutRequests').doc('payout_' + b.id).set({
@@ -1022,6 +1184,8 @@ function continuePayout(b) {
     if (amtEl) amtEl.value = '';
     root._payoutPick = null;
     toast('Payout request submitted.');
+    /* INSIGHT-1: analytics — payout requested */
+    try { if (typeof track === 'function') track('payout_requested', { amount: amt, method: dest.method }); } catch (e) {}
     paintEarnings();
   }).catch(function () { erEl.textContent = 'Could not submit. Please try again.'; });
 }

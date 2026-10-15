@@ -6,6 +6,61 @@ verification first).
 
 ---
 
+## Cycle 16 backend batch (FORGE, 2026-10-15, uncommitted) — Jainik-approved items
+
+**Item 24 — brand-cancel refund executor gap (FIXED):** `cancelBooking()`
+attaches `refundRequested`/`refundAmount`/`statusBeforeCancel`/`cancelledByBiz`
+but never writes `refundProcessed`, so cron §1b's
+`refundProcessed == false` query missed every brand-cancelled booking and the
+escrow sat in limbo. `api/booking-deadlines.js` §1b now runs a second pickup
+query on `refundRequested == true` (doc ids deduped; the txn still skips
+`refundProcessed === true`, so no double-refund). Refund math unchanged:
+server-truth `paidAmount`/`platformFee`; Active cancels → `paidAmount −
+platformFee` + 10% kill-fee, everything else → full refund. New composite
+index `bookings(status ASC, refundRequested ASC)` added to
+`firestore.indexes.json` — deploy with
+`firebase deploy --only firestore:indexes` (manual, Jainik).
+
+**Items 1+23 — `api/refund-request.js` DELETED:** zero callers (verified by
+grep); its refund logic is now fully covered by cron §1b (which, after the
+Item 24 fix, executes Pending/Active/Cancelled brand refunds with the same
+math, ledger shape, and idempotency). Keeping a dead money-moving endpoint
+was a drift liability. `api/` goes 11 → 10 files (headroom under the Vercel
+Hobby 12-function limit). Instant (non-cron) brand refunds remain a possible
+future endpoint; the wiring contract, if ever wanted, belongs in
+`api/booking-action.js` as a `cancel` action, not a separate function.
+
+**Item 2 — rebook history preservation (FIXED):** deterministic
+`collab_{fingerprint}` ids meant a rebook overwrote the dead booking doc
+(destroying the cancel audit trail and corrupting the deterministic
+`refund_{id}`/`payout_{id}`/`killfee_{id}` money ids) and made rehire after
+Completed impossible. New shared `lib/rebook.js` (`resolveRebookId`, used by
+both `api/booking-create.js` and `api/book-with-wallet.js`): terminal docs
+(Completed, or Cancelled with `refundProcessed === true`) are NEVER
+overwritten — the rebook gets `collab_{fp}_r2`/`_r3`/… and the prior
+lifecycle is archived into the new doc's `previousBookings` trail (bounded at
+10). Non-terminal docs still 409 (double-submit idempotency);
+Cancelled-with-pending-refund still 409 until the refund settles.
+`book-with-wallet.js` ledger ids now derive from the final booking id so a
+rebook cannot merge-overwrite the prior booking's deduction row.
+
+**Item 12 — `/api/llm.js` per-uid quota hardened:** the 200/day/uid cap is now
+Firestore-backed (`llm_quota/{uid}`, transactionally incremented, UTC-day
+buckets, server-only collection) instead of in-memory per instance — an
+in-memory map handed every cold serverless instance a fresh 200/day.
+Fail-closed: any quota-check failure denies the call (429), never the
+provider keys.
+
+**Items 3, 5be, 13, 27 — verified holding, no change:** sub-₹100 shares queue
+as `accumulating` in both `api/booking-action.js` and cron §2 (zero-share
+skipped, no junk rows); self-deal guard (`creatorId == uid` → 400) present in
+both booking endpoints plus the rules-layer `creatorId != uid` create guard;
+cron headers state the true daily 02:00 UTC cadence; `api/cashfree-order.js`
+never trusts `body.amount` for bookings/Pro (server rate-card recompute) and
+`api/booking-create.js` rejects `|order_amount − expectedTotal| > 1`.
+
+---
+
 ## Cycle 12 (Worker E — Docs & Decisions, 2026-10-14) — Jainik-approved
 
 **Docs & config (no deploy):**

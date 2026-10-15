@@ -23,9 +23,13 @@
  * Jainik's quota and must not be an open proxy — unauthenticated callers get
  * 401. (GET key-status is intentionally left open: it exposes booleans only.)
  *
- * QUOTA (Item 27, Cycle 16): per-uid daily cap (200/day) on top of the
+ * QUOTA (Item 12, Cycle 16): per-uid daily cap (200/day) on top of the
  * per-IP 30/min rate limit, to bound key burn from a single account.
- * In-memory per instance (same caveat as lib/rateLimit).
+ * Firestore-backed (collection llm_quota, one doc per uid) so the cap holds
+ * across serverless instances and restarts — an in-memory map would hand
+ * every cold instance a fresh 200/day. Transactionally incremented and
+ * FAIL-CLOSED: if the counter cannot be read or incremented, the LLM call is
+ * denied rather than burning Jainik's provider keys unmetered.
  */
 
 const GROQ_URL = 'https://api.groq.com/openai/v1/chat/completions';
@@ -34,28 +38,32 @@ const CF_MODEL = '@cf/meta/llama-3.1-8b-instruct';
 const GEMINI_URL = 'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions';
 const GEMINI_MODEL = 'gemini-1.5-flash';
 const TIMEOUT_MS = 8000;
-const UID_DAILY_MAX = 200; // per-uid daily quota (Item 27)
+const UID_DAILY_MAX = 200; // per-uid daily quota (Item 12)
 
-// Per-uid daily quota buckets: key = uid + ':' + UTC date.
-const uidDailyBuckets = new Map();
-function uidDailyQuota(uid) {
+/* Per-uid daily quota bucket: key = uid, value = { day: 'YYYY-MM-DD' (UTC),
+ * count }. The doc is server-only (Admin SDK; default-deny for clients). */
+async function uidDailyQuotaOk(db, FieldValue, uid) {
   const day = new Date().toISOString().slice(0, 10);
-  const key = uid + ':' + day;
-  const now = Date.now();
-  let rec = uidDailyBuckets.get(key);
-  if (!rec) {
-    rec = { count: 0 };
-    uidDailyBuckets.set(key, rec);
+  const ref = db.collection('llm_quota').doc(String(uid));
+  try {
+    return await db.runTransaction(async (tx) => {
+      const snap = await tx.get(ref);
+      const d = snap.exists ? (snap.data() || {}) : {};
+      if (d.day === day) {
+        const count = Number(d.count || 0);
+        if (count >= UID_DAILY_MAX) return false;
+        tx.set(ref, { day, count: count + 1, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
+        return true;
+      }
+      // New UTC day (or first use): reset the bucket.
+      tx.set(ref, { day, count: 1, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
+      return true;
+    });
+  } catch (e) {
+    // Fail closed: never burn provider keys when the quota cannot be metered.
+    console.error('[llm] quota check failed (fail-closed)', String((e && e.message) || e).slice(0, 160));
+    return false;
   }
-  rec.count += 1;
-  // Prune: keep the map bounded (drop yesterday's buckets opportunistically).
-  if (uidDailyBuckets.size > 5000) {
-    for (const [k] of uidDailyBuckets) {
-      if (!k.endsWith(':' + day)) uidDailyBuckets.delete(k);
-      if (uidDailyBuckets.size <= 4000) break;
-    }
-  }
-  return rec.count <= UID_DAILY_MAX;
 }
 
 function clean(s) {
@@ -162,8 +170,18 @@ export default async function handler(req, res) {
     } catch {
       return res.status(401).json({ provider: 'none', text: '' });
     }
-    // Per-uid daily quota (Item 27): bound key burn from a single account.
-    if (authedUid && !uidDailyQuota(String(authedUid))) {
+    // Per-uid daily quota (Item 12): bound key burn from a single account,
+    // even across distributed IPs and serverless instances. Fail-closed:
+    // a quota-check failure denies the call (429), never the keys.
+    try {
+      const { getAdmin } = await import('../lib/firebaseAdmin.js');
+      const { FieldValue } = await import('firebase-admin/firestore');
+      const ok = await uidDailyQuotaOk(getAdmin().firestore(), FieldValue, String(authedUid));
+      if (!ok) {
+        res.setHeader('Retry-After', '3600');
+        return res.status(429).json({ provider: 'none', text: '', error: 'daily_quota_exceeded' });
+      }
+    } catch {
       res.setHeader('Retry-After', '3600');
       return res.status(429).json({ provider: 'none', text: '', error: 'daily_quota_exceeded' });
     }

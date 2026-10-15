@@ -98,13 +98,13 @@ export const QA_ENTRIES = [
   },
   {
     q: 'What are the business Pro plans?',
-    a: 'Collancer Pro for businesses: Monthly \u20B9799, 6 Months \u20B93,894 (save 19%), Annual \u20B95,988 (best value). Pro gives a 5% discount on every creator booking. Pro status is checked live and revoked automatically on expiry.',
-    tags: ['business pro', 'pro plans', 'subscription', '799', 'pricing'],
+    a: 'Collancer Pro for businesses: Monthly \u20B9999, cancel anytime. Pro gives a 5% discount on the creator price for every paid booking (the 12% platform fee is then calculated on the discounted price). A single \u20B920,000 booking saves you over \u20B91,000. Pro status is checked live and revoked automatically on expiry.',
+    tags: ['business pro', 'pro plans', 'subscription', '999', 'pricing'],
   },
   {
     q: 'What are the creator Pro plans?',
-    a: 'Collancer Pro for creators: Monthly \u20B9599, Quarterly \u20B91,499 (save 17%), Yearly \u20B94,999 (best value). Check the Creator Pro page in the app for the current benefits.',
-    tags: ['creator pro', 'pro plans', 'subscription', '599', 'pricing'],
+    a: 'There is currently no paid Creator Pro subscription. Creators keep 95% of every paid booking automatically \u2014 no plan needed.',
+    tags: ['creator pro', 'pro plans', 'subscription', 'pricing'],
   },
   {
     q: 'What is the Requirements Marketplace?',
@@ -234,7 +234,7 @@ export const KB_TOPICS = {
 
   'wallet-deposits': `Wallet deposits (manual UPI)\n\n1. Go to Wallet and create a deposit request of at least \u20B9100.\n2. Pay the UPI ID shown on the deposit screen from any UPI app.\n3. Enter your payer UPI ID and the 12-digit UTR/reference number.\n4. An admin verifies the payment externally and credits your wallet.\n\nThis is a manual process — crediting is not instant. You cannot credit your own wallet; only admin verification adds balance.`,
 
-  'pro-subscriptions': `Pro subscriptions\n\nBusiness Pro — Monthly \u20B9799, 6 Months \u20B93,894 (save 19%), Annual \u20B95,988 (best value). Benefit: 5% off every creator booking price.\n\nCreator Pro — Monthly \u20B9599, Quarterly \u20B91,499 (save 17%), Yearly \u20B94,999 (best value). See the Creator Pro page for current benefits.\n\nPro status is checked live and revoked automatically when it expires.`,
+  'pro-subscriptions': `Pro subscriptions\n\nBusiness Pro \u2014 Monthly \u20B9999, cancel anytime. Benefit: 5% off the creator price on every paid booking (the 12% platform fee is then calculated on the discounted price). A single \u20B920,000 booking saves you over \u20B91,000.\n\nThere is currently no paid Creator Pro plan \u2014 creators keep 95% of every paid booking automatically.\n\nPro status is checked live and revoked automatically when it expires.`,
 
   'marketplace-guide': `Requirements marketplace guide\n\nFor businesses:\n- Post a requirement with title, description, budget, category, platform, follower range, location, language, deliverables, and application instructions.\n- Review creator offers (price, message, timeline) and accept or reject each.\n- Accepting creates a booking the creator must still accept.\n\nFor creators:\n- Browse open requirements and send an offer with your price and pitch.\n- Withdraw anytime while pending.\n- If your accepted offer's booking is rejected, the requirement can reopen.`,
 

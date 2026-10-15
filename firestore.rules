@@ -430,7 +430,27 @@ service cloud.firestore {
           // brand may queue payout for its completed booking
           || (payoutBookingData().bizId == request.auth.uid
             && payoutBookingData().status == 'Completed'));
-      allow update: if isAdmin();
+      allow update: if isAdmin()
+        // Item 11 (Cycle 17, LEDGER): the creator may add/update ONLY the
+        // payout destination fields on their OWN pending payout requests.
+        // Money fields (creatorId, bookingId, amount, status) are immutable
+        // here — the hasOnly + equality checks below enforce it. This closes
+        // the UPI-details gap: server-queued payouts (brand-approve in
+        // api/booking-action.js, cron auto-approve in api/booking-deadlines.js)
+        // previously carried no destination info and the creator had no
+        // client path to add it, so every auto-queued payout stalled in the
+        // admin queue. NOTE: this rule must be published in the Firebase
+        // console before the matching client change ships, otherwise the
+        // client's update() calls fail with permission-denied.
+        || (isAuthed()
+          && resource.data.creatorId == request.auth.uid
+          && resource.data.status == 'pending'
+          && request.resource.data.diff(resource.data).affectedKeys()
+            .hasOnly(['method', 'upi', 'holder', 'account', 'ifsc'])
+          && request.resource.data.creatorId == resource.data.creatorId
+          && request.resource.data.bookingId == resource.data.bookingId
+          && request.resource.data.amount == resource.data.amount
+          && request.resource.data.status == 'pending');
       allow delete: if false;
     }
 
@@ -673,6 +693,17 @@ service cloud.firestore {
       allow create: if request.resource.data.name is string
         && request.resource.data.email is string
         && request.resource.data.phone is string;
+      allow update, delete: if isAdmin();
+    }
+
+    /* ---------------- data deletion requests (DPDP Act, 2023) ---------------- */
+    // Item 14 (DESI, Cycle 18): users queue their own deletion request;
+    // only admins can read/process them.
+    match /deletionRequests/{id} {
+      allow read: if isAdmin();
+      allow create: if isAuthed()
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.status == 'pending';
       allow update, delete: if isAdmin();
     }
 

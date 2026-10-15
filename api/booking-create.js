@@ -26,6 +26,7 @@
 import { getAdmin, verifyUid, readBody } from '../lib/firebaseAdmin.js';
 import { FieldValue } from 'firebase-admin/firestore';
 import { isProActiveBiz } from '../lib/pricing.js';
+import { resolveRebookId } from '../lib/rebook.js';
 
 const CF_API_VERSION = '2023-08-01';
 function cfBase(env) {
@@ -184,6 +185,7 @@ export default async function handler(req, res) {
   const bookingId = 'collab_' + fp;
   const now = new Date();
   const db = getAdmin().firestore();
+  let finalBookingId = bookingId; // may become a suffixed rebook id (Item 2)
   try {
     await db.runTransaction(async (tx) => {
       const regRef = db.collection('payment_orders').doc(orderId);
@@ -207,26 +209,14 @@ export default async function handler(req, res) {
           throw e;
         }
       }
-      const bookRef = db.collection('bookings').doc(bookingId);
-      const bookSnap = await tx.get(bookRef);
-      if (bookSnap.exists) {
-        const existing = bookSnap.data() || {};
-        if (existing.status !== 'Cancelled') {
-          const e = new Error('A booking with this fingerprint already exists.');
-          e.code = 'DUPLICATE_BOOKING';
-          throw e;
-        }
-        // Item 2 (Cycle 16): never overwrite a Cancelled booking while its
-        // refund intent is unprocessed — the rebook would destroy the pending
-        // refund and the cancel audit trail. The brand must wait for the
-        // refund to settle (cron §1b or /api/refund-request) before rebooking
-        // the same collaboration. Fail closed on legacy docs with no flag.
-        if (existing.refundProcessed !== true) {
-          const e = new Error('This booking was cancelled with a pending refund. Wait for the refund to settle before rebooking.');
-          e.code = 'REBOOK_BLOCKED_PENDING_REFUND';
-          throw e;
-        }
-      }
+      // Item 2 (Cycle 16): rebook-safe id resolution (lib/rebook.js). A
+      // terminal doc (Completed, or Cancelled with settled refund) is NEVER
+      // overwritten — the rebook gets a suffixed id and the prior doc is
+      // archived into previousBookings. Non-terminal docs still 409
+      // (double-submit idempotency); Cancelled+pending-refund still 409.
+      const rb = await resolveRebookId(tx, db, bookingId);
+      finalBookingId = rb.bookingId;
+      const finalBookRef = db.collection('bookings').doc(finalBookingId);
       // Server-side booking doc: whitelist client draft fields; all money
       // fields and lifecycle fields are recomputed/forced here.
       const doc = {
@@ -259,15 +249,20 @@ export default async function handler(req, res) {
         reviewDeadline: null, autoCancelled: false, autoApproved: false,
         paidAt: FieldValue.serverTimestamp(), createdAt: FieldValue.serverTimestamp(),
         updatedAt: FieldValue.serverTimestamp(),
+        // Item 2 (Cycle 16): rebook audit trail — the archived prior
+        // lifecycle(s) of this collaboration. Never overwritten, only appended.
+        previousBookings: rb.previousBookings,
+        rebookOf: rb.rebookOf,
+        rebookAttempt: rb.rebookAttempt,
       };
       tx.set(regRef, {
-        uid, bookingId, amount: orderAmount, expectedTotal, creatorPrice,
+        uid, bookingId: finalBookingId, amount: orderAmount, expectedTotal, creatorPrice,
         cfPaymentId: order.cf_order_id || null, cashfreeEnv: env,
         status: 'booked', // consumed: the cron reconcile skips booked orders
         bookedAt: FieldValue.serverTimestamp(),
         paidAt: FieldValue.serverTimestamp(), createdAt: FieldValue.serverTimestamp(),
       }, { merge: true });
-      tx.set(bookRef, doc);
+      tx.set(finalBookRef, doc);
     });
   } catch (e) {
     if (e && e.code === 'ORDER_REUSED') return json(res, 409, { error: 'order_reused', message: e.message });
@@ -287,11 +282,11 @@ export default async function handler(req, res) {
       creatorId, type: 'booking_received', title: 'New collaboration request',
       body: (s(draft.bizName, 120) || 'A brand') + ' booked ' +
         (s(draft.campaignName, 120) || 'a campaign') + '.',
-      bookingId, read: false, createdAt: FieldValue.serverTimestamp(),
+      bookingId: finalBookingId, read: false, createdAt: FieldValue.serverTimestamp(),
     });
   } catch (e) {
     console.error('[booking-create] creatorNotif', String(e && e.message || e).slice(0, 160));
   }
 
-  return json(res, 200, { bookingId });
+  return json(res, 200, { bookingId: finalBookingId });
 }

@@ -62,7 +62,7 @@ export function buildPoolMessages(question, isCreator = false) {
     'Answer directly and helpfully across general topics, creator growth, brand campaigns, and Collancer workflows.\n' +
     'Always-true Collancer facts (never contradict these):\n' +
     '- Paid bookings: the creator\u2019s listed price + a 12% platform fee paid by the brand.\n' +
-    '- Business Pro members receive 5% off the creator listed price.\n' +
+    '- Business Pro members receive 5% off the creator listed price BEFORE the 12% fee is calculated.\n' +
     '- Creators receive 95% of their package price.\n' +
     '- Admin manually releases completion payments after milestone approval.\n' +
     'Rules:\n' +
