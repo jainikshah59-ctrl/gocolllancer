@@ -22,6 +22,7 @@
  */
 import { getAdmin, verifyUid, readBody } from '../lib/firebaseAdmin.js';
 import { FieldValue } from 'firebase-admin/firestore';
+import { isProActiveBiz } from '../lib/pricing.js';
 
 function json(res, code, obj) {
   res.statusCode = code;
@@ -56,6 +57,8 @@ export default async function handler(req, res) {
   const draft = (body.booking && typeof body.booking === 'object') ? body.booking : {};
   const creatorId = s(draft.creatorId, 64);
   if (!creatorId) return json(res, 400, { error: 'missing_creator' });
+  // Item 5 (Cycle 16): self-deal guard — a user can never book themselves.
+  if (creatorId === uid) return json(res, 400, { error: 'self_booking' });
   const creatorPrice = num(draft.creatorPrice);
   const barter = draft.type === 'barter';
   if (!barter && (!(creatorPrice > 0) || creatorPrice > 10000000))
@@ -73,7 +76,9 @@ export default async function handler(req, res) {
     console.error('[book-with-wallet] brand lookup', String(e && e.message || e).slice(0, 160));
     return json(res, 500, { error: 'brand_lookup_failed' });
   }
-  const isPro = !!(biz.isPro && biz.proActive);
+  // Item 13 (Cycle 16): unified on lib/pricing isProActiveBiz (respects the
+  // 30-day subscription expiry; the old inline check never expired).
+  const isPro = isProActiveBiz(biz);
 
   // (c) canonical pricing — computed server-side, never from the client.
   // Business Pro = 5% off the CREATOR PRICE first, then 12% fee on the discounted price.
@@ -90,10 +95,21 @@ export default async function handler(req, res) {
     await db.runTransaction(async (tx) => {
       const bookRef = db.collection('bookings').doc(bookingId);
       const bookSnap = await tx.get(bookRef);
-      if (bookSnap.exists && bookSnap.data() && bookSnap.data().status !== 'Cancelled') {
-        const e = new Error('A booking with this fingerprint already exists.');
-        e.code = 'DUPLICATE_BOOKING';
-        throw e;
+      if (bookSnap.exists) {
+        const existing = bookSnap.data() || {};
+        if (existing.status !== 'Cancelled') {
+          const e = new Error('A booking with this fingerprint already exists.');
+          e.code = 'DUPLICATE_BOOKING';
+          throw e;
+        }
+        // Item 2 (Cycle 16): never overwrite a Cancelled booking while its
+        // refund intent is unprocessed — the rebook would destroy the pending
+        // refund and the cancel audit trail. Fail closed on legacy docs.
+        if (existing.refundProcessed !== true) {
+          const e = new Error('This booking was cancelled with a pending refund. Wait for the refund to settle before rebooking.');
+          e.code = 'REBOOK_BLOCKED_PENDING_REFUND';
+          throw e;
+        }
       }
       const bs = await tx.get(bizRef);
       const bal = Number((bs.data() || {}).walletBalance || 0);
@@ -157,6 +173,7 @@ export default async function handler(req, res) {
   } catch (e) {
     if (e && e.code === 'DUPLICATE_BOOKING') return json(res, 409, { error: 'duplicate_booking', message: e.message });
     if (e && e.code === 'INSUFFICIENT_BALANCE') return json(res, 402, { error: 'insufficient_balance', message: e.message });
+    if (e && e.code === 'REBOOK_BLOCKED_PENDING_REFUND') return json(res, 409, { error: 'rebook_blocked_pending_refund', message: e.message });
     console.error('[book-with-wallet] txn', String(e && e.message || e).slice(0, 200));
     return json(res, 500, { error: 'booking_failed' });
   }

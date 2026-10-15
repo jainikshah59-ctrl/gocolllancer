@@ -46,12 +46,20 @@ service cloud.firestore {
         && (!('addedToCollancer' in request.resource.data) || request.resource.data.addedToCollancer == false)
         && (!('banned' in request.resource.data) || request.resource.data.banned == false)
         && !('verificationStatus' in request.resource.data)
-        && !('adminNotes' in request.resource.data);
+        && !('adminNotes' in request.resource.data)
+        // Item 14 (Cycle 16): PII (email/phone) may never live on the
+        // public creators doc — it goes to creators/{id}/private/contact
+        // (private subcollection below). Blocked on create here.
+        && !('email' in request.resource.data)
+        && !('phone' in request.resource.data);
 
       allow update: if isAdmin()
         || (isOwner(id)
           && !request.resource.data.diff(resource.data).affectedKeys()
-            .hasAny(['verificationStatus', 'verified', 'addedToCollancer', 'adminNotes', 'banned', 'instagram', 'rating'])
+            .hasAny(['verificationStatus', 'verified', 'addedToCollancer', 'adminNotes', 'banned', 'instagram', 'rating',
+              // Item 14 (Cycle 16): email/phone are denied on the public
+              // doc — owner cannot write PII here even for their own doc.
+              'email', 'phone'])
           && (resource.data.get('instagram', null) == null
             || !request.resource.data.diff(resource.data).affectedKeys()
               .hasAny(['handle', 'handleLower', 'pfp', 'followers', 'bio'])));
@@ -62,6 +70,19 @@ service cloud.firestore {
         // future ratings-by-bookingId flow (ratings/{bookingId}, booking
         // Completed && booking.bizId == auth.uid).
 
+      allow delete: if false;
+    }
+
+    /* ---------------- creator private contact (PII, Item 14 Cycle 16) ----------------
+       Signup email/phone live ONLY here: creators/{id}/private/contact.
+       Readable by the owner + admins. The public creators/{id} doc is
+       world-readable (discovery) and now denies email/phone (see above).
+       NOTE: existing creators docs that already carry email/phone must be
+       migrated server-side (Admin SDK) — rules alone cannot strip old data. */
+
+    match /creators/{id}/private/contact {
+      allow get: if isOwner(id) || isAdmin();
+      allow create, update: if isOwner(id) || isAdmin();
       allow delete: if false;
     }
 
@@ -259,6 +280,11 @@ service cloud.firestore {
         && request.resource.data.bizId == request.auth.uid
         && request.resource.data.creatorId is string
         && request.resource.data.creatorId.size() > 0
+        // Item 5 (Cycle 16) — self-deal guard: a user cannot book
+        // themselves. creatorId == auth.uid is denied here at the rules
+        // layer (backend agent adds the same guard in api/booking-create
+        // and api/book-with-wallet).
+        && request.resource.data.creatorId != request.auth.uid
         && request.resource.data.status == 'Pending'
         && docVal(request.resource.data, 'paymentApproved', false) == false
         && !('releasedAt' in request.resource.data)

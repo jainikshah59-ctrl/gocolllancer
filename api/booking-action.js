@@ -165,6 +165,39 @@ export default async function handler(req, res) {
       }
       return { payoutCreated, share, payoutStatus };
     });
+    // Item 12 (Cycle 16): the brand approved — the creator's money moment.
+    // Tell them the escrow released and what was queued. Best-effort.
+    let bd = {};
+    try {
+      const bSnap = await db.collection('bookings').doc(bookingId).get();
+      bd = bSnap.exists ? (bSnap.data() || {}) : {};
+      if (bd.creatorId) {
+        const shareTxt = Number(out.share || 0) > 0
+          ? ' Rs.' + Number(out.share).toLocaleString('en-IN') + ' has been queued to your payouts'
+          : ' Your payout has been queued';
+        await db.collection('creatorNotifs').add({
+          creatorId: bd.creatorId, type: 'booking_approved',
+          title: 'Booking approved — payout queued',
+          body: 'The brand approved your delivery.' + shareTxt +
+            (out.payoutStatus === 'accumulating' ? ' (below the Rs.100 floor — it accumulates with your future payouts).' : '.'),
+          bookingId, read: false, createdAt: FieldValue.serverTimestamp(),
+        });
+      }
+    } catch (e) {
+      console.error('[booking-action] creatorNotif approve', String(e && e.message || e).slice(0, 160));
+    }
+    // Referral credit (Cycle 17): a referred creator's first PAID completed
+    // booking earns the referrer Rs.100 (lib/referral.js — idempotent via
+    // payoutRequests/ref_{creatorId}, so the cron auto-approve path can call
+    // it too without double-credit). Best-effort, never blocks the response.
+    try {
+      if (bd.creatorId) {
+        const { maybeCreditReferral } = await import('../lib/referral.js');
+        await maybeCreditReferral(db, { creatorId: bd.creatorId, bookingId, bookingType: bd.type });
+      }
+    } catch (e) {
+      console.error('[booking-action] referral', String(e && e.message || e).slice(0, 160));
+    }
     return json(res, 200, { ok: true, bookingId, ...out });
   } catch (e) {
     if (e && e.code === 'NOT_FOUND') return json(res, 404, { error: 'not_found' });

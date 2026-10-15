@@ -22,6 +22,10 @@
  * SECURITY (C13): POST requires Firebase auth (verifyUid). The LLM keys are
  * Jainik's quota and must not be an open proxy — unauthenticated callers get
  * 401. (GET key-status is intentionally left open: it exposes booleans only.)
+ *
+ * QUOTA (Item 27, Cycle 16): per-uid daily cap (200/day) on top of the
+ * per-IP 30/min rate limit, to bound key burn from a single account.
+ * In-memory per instance (same caveat as lib/rateLimit).
  */
 
 const GROQ_URL = 'https://api.groq.com/openai/v1/chat/completions';
@@ -30,6 +34,29 @@ const CF_MODEL = '@cf/meta/llama-3.1-8b-instruct';
 const GEMINI_URL = 'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions';
 const GEMINI_MODEL = 'gemini-1.5-flash';
 const TIMEOUT_MS = 8000;
+const UID_DAILY_MAX = 200; // per-uid daily quota (Item 27)
+
+// Per-uid daily quota buckets: key = uid + ':' + UTC date.
+const uidDailyBuckets = new Map();
+function uidDailyQuota(uid) {
+  const day = new Date().toISOString().slice(0, 10);
+  const key = uid + ':' + day;
+  const now = Date.now();
+  let rec = uidDailyBuckets.get(key);
+  if (!rec) {
+    rec = { count: 0 };
+    uidDailyBuckets.set(key, rec);
+  }
+  rec.count += 1;
+  // Prune: keep the map bounded (drop yesterday's buckets opportunistically).
+  if (uidDailyBuckets.size > 5000) {
+    for (const [k] of uidDailyBuckets) {
+      if (!k.endsWith(':' + day)) uidDailyBuckets.delete(k);
+      if (uidDailyBuckets.size <= 4000) break;
+    }
+  }
+  return rec.count <= UID_DAILY_MAX;
+}
 
 function clean(s) {
   let t = String(s || '');
@@ -127,12 +154,18 @@ export default async function handler(req, res) {
   body = body && typeof body === 'object' ? body : {};
 
   // Firebase auth for POST — the LLM keys must not be an open proxy.
+  let authedUid = null;
   if (req.method === 'POST') {
     try {
       const { verifyUid } = await import('../lib/firebaseAdmin.js');
-      await verifyUid(body.idToken || (req.headers.authorization || '').replace(/^Bearer\s+/i, ''));
+      authedUid = await verifyUid(body.idToken || (req.headers.authorization || '').replace(/^Bearer\s+/i, ''));
     } catch {
       return res.status(401).json({ provider: 'none', text: '' });
+    }
+    // Per-uid daily quota (Item 27): bound key burn from a single account.
+    if (authedUid && !uidDailyQuota(String(authedUid))) {
+      res.setHeader('Retry-After', '3600');
+      return res.status(429).json({ provider: 'none', text: '', error: 'daily_quota_exceeded' });
     }
   }
 

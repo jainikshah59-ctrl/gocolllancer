@@ -48,13 +48,13 @@ export const QA_ENTRIES = [
   },
   {
     q: 'How do wallet deposits work?',
-    a: 'Go to the Wallet page and create a deposit request of at least \u20B9100. Pay the shown UPI ID (collancer@upi) from any UPI app, then enter your payer UPI ID and the 12-digit UTR/reference number. An admin verifies the payment externally and credits your wallet — this is a manual process, so crediting can take some time.',
+    a: 'Go to the Wallet page and create a deposit request of at least ₹100. Pay the UPI ID shown on the deposit screen from any UPI app (GPay/PhonePe), then enter your payer UPI ID and the 12-digit UTR/reference number. An admin verifies the payment externally and credits your wallet — this is a manual process, so crediting can take some time.',
     tags: ['wallet', 'deposit', 'top up', 'upi', 'utr', 'recharge', 'add money'],
   },
   {
     q: 'What UPI ID do I pay for wallet deposits?',
-    a: 'Pay to collancer@upi from your UPI app, then submit the deposit request in the Wallet page with your payer UPI ID and the 12-digit UTR. The admin credits your wallet only after verifying the payment.',
-    tags: ['upi id', 'deposit', 'wallet', 'pay to', 'collancer@upi'],
+    a: 'Pay the UPI ID shown on the Wallet deposit screen from your UPI app, then submit the deposit request with your payer UPI ID and the 12-digit UTR. The admin credits your wallet only after verifying the payment.',
+    tags: ['upi id', 'deposit', 'wallet', 'pay to', 'upi'],
   },
   {
     q: 'Is my booking payment held safely? What is escrow?',
@@ -230,9 +230,9 @@ export const KB_TOPICS = {
 
   'getting-started-creator': `Getting started as a creator\n\n1. Sign up and complete your profile: name, handle, bio, platform, niche, city.\n2. Reach at least 10,000 followers and set at least one package price.\n3. Submit verification with your profile URL and details; an admin reviews it.\n4. Once added to Collancer, businesses can discover and book you.\n5. Accept bookings promptly, deliver on time, and request payouts from Earnings.\n\nYour price is locked at booking — businesses pay exactly what you set, and you earn 95% of it.`,
 
-  'payments-escrow': `Payments and escrow\n\n- Every paid booking = creator price + 12% platform fee. Pro businesses get a 5% discount on the creator price.\n- Your payment is held in escrow when you book. It is NOT sent to the creator immediately.\n- After delivery and your completion request, an admin quality-checks and releases the payment.\n- Creators earn 95% of the creator price.\n- Cancellations of wallet-paid bookings refund the exact escrow amount back to your wallet.`,
+  'payments-escrow': `Payments and escrow\n\n- Every paid booking = creator price + 12% platform fee. Pro businesses get a 5% discount on the creator price.\n- Your payment is held in escrow when you book. It is NOT sent to the creator immediately.\n- After delivery, you review the work and approve it — approval releases the payment to the creator.\n- Creators earn 95% of the creator price.\n- Cancellations of wallet-paid bookings refund the exact escrow amount back to your wallet.`,
 
-  'wallet-deposits': `Wallet deposits (manual UPI)\n\n1. Go to Wallet and create a deposit request of at least \u20B9100.\n2. Pay the shown UPI ID (collancer@upi) from any UPI app.\n3. Enter your payer UPI ID and the 12-digit UTR/reference number.\n4. An admin verifies the payment externally and credits your wallet.\n\nThis is a manual process — crediting is not instant. You cannot credit your own wallet; only admin verification adds balance.`,
+  'wallet-deposits': `Wallet deposits (manual UPI)\n\n1. Go to Wallet and create a deposit request of at least \u20B9100.\n2. Pay the UPI ID shown on the deposit screen from any UPI app.\n3. Enter your payer UPI ID and the 12-digit UTR/reference number.\n4. An admin verifies the payment externally and credits your wallet.\n\nThis is a manual process — crediting is not instant. You cannot credit your own wallet; only admin verification adds balance.`,
 
   'pro-subscriptions': `Pro subscriptions\n\nBusiness Pro — Monthly \u20B9799, 6 Months \u20B93,894 (save 19%), Annual \u20B95,988 (best value). Benefit: 5% off every creator booking price.\n\nCreator Pro — Monthly \u20B9599, Quarterly \u20B91,499 (save 17%), Yearly \u20B94,999 (best value). See the Creator Pro page for current benefits.\n\nPro status is checked live and revoked automatically when it expires.`,
 

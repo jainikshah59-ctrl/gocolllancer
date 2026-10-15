@@ -29,7 +29,7 @@ function esc(t) {
     return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c];
   });
 }
-function inr(n) { return '\u20B9' + Number(n || 0).toLocaleString('en-IN'); }
+/* inr() removed — uses the single global from index.html (Item 28, Cycle 16). */
 function fmtCount(n) {
   n = Number(n || 0);
   if (n >= 10000000) return (n / 10000000).toFixed(1).replace(/\.0$/, '') + 'Cr';
@@ -552,6 +552,7 @@ function wireActions() {
     var purpose = /wallet[\s\-_]*top[\s\-_]*up/i.test(label) ? 'wallet_topup' : label;
     realCashfreePay(p.o.amt, label, function (id, env) {
       if (id === null) { done(); return; } // backend unconfigured -> original demo flow
+      if (id === false) { release(); return; } // real payment failed/declined -> hard fail, NO demo (toast already shown)
       try {
         ppClose();
         p.o.after(id);
@@ -609,7 +610,8 @@ function wireActions() {
     toast('Opening secure payment…');
     realCashfreePay(PRO_SUBSCRIPTION_PRICE, 'pro_subscription', function (orderId, env) {
       release();
-      if (!orderId) { toast('Payment not completed.'); return; } // unconfigured / cancelled / unverified
+      if (orderId === false) return; // real payment failed/declined -> hard fail (toast already shown)
+      if (!orderId) { toast('Payment not completed.'); return; } // unconfigured / cancelled
       toast('Confirming subscription…');
       // Server-side activation (cashfree-webhook): watch the business doc —
       // loadBusiness's onSnapshot refreshes bizDoc — until isProActive()
@@ -694,7 +696,7 @@ function payWithWallet(T) {
     if (/duplicate_booking|DUPLICATE/i.test(m)) toast('You already have an active request like this.');
     else if (/insufficient_balance|INSUFFICIENT/i.test(m)) toast('Insufficient wallet balance. Please add money.');
     else if (/permission|denied/i.test(m)) toast('Wallet payments need brand access enabled.');
-    else toast('Payment failed. Please try again.');
+    else toast(window.tM ? window.tM('Payment failed') : 'Payment failed. Please try again.');
   });
 }
 
@@ -721,6 +723,11 @@ function realCashfreePay(amount, label, cb, extra) {
   if (cashfreeInFlight) { toast('Payment is already being processed. Please wait.'); return; }
   cashfreeInFlight = true;
   var done = function (orderId, env) { cashfreeInFlight = false; cb(orderId, env); };
+  // Item 4 (Cycle 16): a declined/failed REAL payment must HARD-FAIL — it must
+  // never fall through to the demo success flow ("Money added" for monopoly
+  // money). done(null) = backend unconfigured -> demo fallback is legitimate.
+  // fail() = real payment failed/declined/unverified -> cb(false), no demo.
+  var fail = function (msg) { cashfreeInFlight = false; if (msg) toast(msg); cb(false); };
   var x = extra || {};
   FB.api('cashfree-order', {
     amount: amount,
@@ -741,11 +748,11 @@ function realCashfreePay(amount, label, cb, extra) {
         var charged = (r && r.order_amount != null) ? r.order_amount : amount;
         return FB.api('cashfree-verify', { order_id: r.order_id, expected_amount: charged }).then(function (v) {
           if (v && v.order_status === 'PAID' && v.amount_matches !== false) done(r.order_id, r.env || 'test');
-          else { toast('Payment not confirmed. Please try again.'); done(null); }
+          else fail(window.tM ? window.tM('Payment not confirmed') : 'Payment not confirmed. Please try again.');
         });
       });
-    }).catch(function () { toast('Could not open payment gateway.'); done(null); });
-  }).catch(function () { done(null); });
+    }).catch(function () { fail('Could not open payment gateway.'); });
+  }).catch(function () { fail(); });
 }
 
 /* Paid-but-unsaved retry: if /api/booking-create fails after a successful
@@ -785,7 +792,8 @@ function payWithCashfreeBooking(T) {
   if (!draft0) { toast('Could not start booking. Please try again.'); return; }
   var extra = { purpose: 'booking_payment', creatorId: draft0.creatorId, creatorPrice: draft0.creatorPrice };
   realCashfreePay(T.t, 'Booking \u00B7 ' + ((S.bk.f && S.bk.f.campaign) || ''), function (orderId, env) {
-    if (!orderId) return; // demo fallback already handled by A.ppay path
+    if (orderId === false) return; // real payment failed/declined -> hard fail, NO demo (toast already shown)
+    if (!orderId) return; // backend unconfigured -> demo fallback already handled by A.ppay path
     var booking = buildBooking('cashfree', orderId, true, env || 'test');
     if (!booking) return;
     toast('Confirming payment\u2026');
@@ -1339,7 +1347,7 @@ function payOffer(oid, price) {
     var m = (e && e.message) || '';
     if (/insufficient_balance|INSUFFICIENT/i.test(m)) toast('Insufficient wallet balance. Please add money.');
     else if (m === 'not_yours') toast('This booking does not belong to your account.');
-    else toast('Payment failed. Please try again.');
+    else toast(window.tM ? window.tM('Payment failed') : 'Payment failed. Please try again.');
   });
 }
 try { window.collancerPayOffer = payOffer; } catch (e) {}
@@ -1385,8 +1393,11 @@ function chatSend(oid, text) {
 function chatClose() { if (chatUnsub) { try { chatUnsub(); } catch (e) {} chatUnsub = null; } }
 try { window.collancerChatSub = chatSub; window.collancerChatSend = chatSend; window.collancerChatClose = chatClose; } catch (e) {}
 
-/* Item 16 — review submit. The rules gate creation to brands holding a
- * COMPLETED booking carrying this bookingId for this creator. */
+/* Item 6 (Cycle 16) — review submit. The rules gate creation to brands holding a
+ * COMPLETED booking carrying this bookingId for this creator, AND require the
+ * review doc id to EQUAL bookingId (one review per booking). .add() generates
+ * a random id so every legitimate review was permission-denied — use
+ * doc(bookingId).set(). */
 function submitReview(bookingId, creatorId, stars, text) {
   bookingId = String(bookingId || ''); creatorId = String(creatorId || '');
   stars = Math.max(1, Math.min(5, Math.floor(Number(stars) || 0)));
@@ -1395,7 +1406,7 @@ function submitReview(bookingId, creatorId, stars, text) {
   toast('Submitting review\u2026');
   var bizName = 'Business';
   try { bizName = (S.name || (bizDoc && bizDoc.bizName) || 'Business').slice(0, 120); } catch (e) {}
-  DB.collection('reviews').add({
+  DB.collection('reviews').doc(bookingId).set({
     bookingId: bookingId, creatorId: creatorId, bizId: uid, bizName: bizName,
     stars: stars, text: text, createdAt: FB.serverStamp(),
   }).then(function () {

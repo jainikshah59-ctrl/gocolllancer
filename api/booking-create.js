@@ -25,6 +25,7 @@
  */
 import { getAdmin, verifyUid, readBody } from '../lib/firebaseAdmin.js';
 import { FieldValue } from 'firebase-admin/firestore';
+import { isProActiveBiz } from '../lib/pricing.js';
 
 const CF_API_VERSION = '2023-08-01';
 function cfBase(env) {
@@ -73,6 +74,9 @@ export default async function handler(req, res) {
   if (!(creatorPrice > 0) || creatorPrice > 10000000) return json(res, 400, { error: 'bad_creator_price' });
   const creatorId = s(draft.creatorId, 64);
   if (!creatorId) return json(res, 400, { error: 'missing_creator' });
+  // Item 5 (Cycle 16): self-deal guard — a user can never book themselves.
+  // (Backstops: the review-time creatorId != uid rule; money-negative farming.)
+  if (creatorId === uid) return json(res, 400, { error: 'self_booking' });
 
   // (a2) C7#6: verify creatorPrice against the creator's listed package
   // prices. creatorPrice was the last client-controlled pricing input —
@@ -155,12 +159,14 @@ export default async function handler(req, res) {
 
   // (c) server-computed expected total — canonical pricing formula.
   // Business Pro = 5% off the CREATOR PRICE first, then 12% fee on the discounted price.
+  // Item 13 (Cycle 16): unified on lib/pricing isProActiveBiz (respects the
+  // 30-day subscription expiry; the old inline check never expired).
   let isPro = false;
   try {
     const db = getAdmin().firestore();
     const bizSnap = await db.collection('businesses').doc(uid).get();
     const biz = bizSnap.exists ? bizSnap.data() : null;
-    isPro = !!(biz && biz.isPro && biz.proActive);
+    isPro = isProActiveBiz(biz);
   } catch (e) {
     return json(res, 500, { error: 'brand_lookup_failed' });
   }
@@ -203,10 +209,23 @@ export default async function handler(req, res) {
       }
       const bookRef = db.collection('bookings').doc(bookingId);
       const bookSnap = await tx.get(bookRef);
-      if (bookSnap.exists && bookSnap.data() && bookSnap.data().status !== 'Cancelled') {
-        const e = new Error('A booking with this fingerprint already exists.');
-        e.code = 'DUPLICATE_BOOKING';
-        throw e;
+      if (bookSnap.exists) {
+        const existing = bookSnap.data() || {};
+        if (existing.status !== 'Cancelled') {
+          const e = new Error('A booking with this fingerprint already exists.');
+          e.code = 'DUPLICATE_BOOKING';
+          throw e;
+        }
+        // Item 2 (Cycle 16): never overwrite a Cancelled booking while its
+        // refund intent is unprocessed — the rebook would destroy the pending
+        // refund and the cancel audit trail. The brand must wait for the
+        // refund to settle (cron §1b or /api/refund-request) before rebooking
+        // the same collaboration. Fail closed on legacy docs with no flag.
+        if (existing.refundProcessed !== true) {
+          const e = new Error('This booking was cancelled with a pending refund. Wait for the refund to settle before rebooking.');
+          e.code = 'REBOOK_BLOCKED_PENDING_REFUND';
+          throw e;
+        }
       }
       // Server-side booking doc: whitelist client draft fields; all money
       // fields and lifecycle fields are recomputed/forced here.
@@ -254,8 +273,24 @@ export default async function handler(req, res) {
     if (e && e.code === 'ORDER_REUSED') return json(res, 409, { error: 'order_reused', message: e.message });
     if (e && e.code === 'WRONG_ORDER_PURPOSE') return json(res, 400, { error: 'wrong_order_purpose', message: e.message });
     if (e && e.code === 'DUPLICATE_BOOKING') return json(res, 409, { error: 'duplicate_booking', message: e.message });
+    if (e && e.code === 'REBOOK_BLOCKED_PENDING_REFUND') return json(res, 409, { error: 'rebook_blocked_pending_refund', message: e.message });
     console.error('[booking-create] txn', String(e && e.message || e).slice(0, 200));
     return json(res, 500, { error: 'booking_failed' });
+  }
+
+  // Item 12 follow-up (Cycle 17): the cashfree booking path never told the
+  // creator — the wallet path (book-with-wallet.js) already sends
+  // 'booking_received'. Mirror it here so offer-accept via card/UPI also
+  // notifies. Best-effort, outside the txn.
+  try {
+    await db.collection('creatorNotifs').add({
+      creatorId, type: 'booking_received', title: 'New collaboration request',
+      body: (s(draft.bizName, 120) || 'A brand') + ' booked ' +
+        (s(draft.campaignName, 120) || 'a campaign') + '.',
+      bookingId, read: false, createdAt: FieldValue.serverTimestamp(),
+    });
+  } catch (e) {
+    console.error('[booking-create] creatorNotif', String(e && e.message || e).slice(0, 160));
   }
 
   return json(res, 200, { bookingId });

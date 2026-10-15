@@ -1,7 +1,7 @@
 /* POST /api/refund-request
  * Brand-requested on-demand refund — the immediate counterpart of the cron
  * §1b finalize in api/booking-deadlines.js (a brand should not have to wait
- * for the hourly cron to get money back).
+ * for the daily cron to get money back).
  *
  * Same server-truth refund semantics as the cron:
  *  - only the owning brand (bookings/{id}.bizId === uid) can request
@@ -15,12 +15,24 @@
  *
  * Eligible statuses:
  *  - 'Pending'   → the booking is cancelled and the escrow is refunded to
- *                  the brand wallet (creator never accepted).
+ *                  the brand wallet (creator never accepted). FULL refund.
+ *  - 'Active'    → the brand cancels an Active booking: PARTIAL refund
+ *                  (paidAmount - platformFee, platform fee retained) and the
+ *                  creator is queued a 10% kill-fee from the retained fee
+ *                  portion (payoutRequests/killfee_{bookingId}) — exactly the
+ *                  cron §1b policy, executed instantly.
  *  - 'Cancelled' → finalizes a pending refund intent (e.g. creator declined
- *                  via creator-side flow) exactly like cron §1b.
+ *                  via creator-side flow) exactly like cron §1b: full refund,
+ *                  or partial + kill-fee when the doc carries the Active
+ *                  cancel policy (statusBeforeCancel === 'Active').
  * NOT refundable here: 'PendingCompletion' (delivered, under review),
  * 'Completed' (escrow released), 'Disputed' (needs admin resolution).
  * Barter bookings and Rs.0 bookings close the intent with nothing to refund.
+ *
+ * FRONTEND WIRING CONTRACT (Item 23): the brand cancel flow should call this
+ * endpoint (POST { idToken, bookingId }) instead of relying on the daily
+ * cron for instant refunds. The endpoint cancels Pending/Active bookings
+ * itself and finalizes Cancelled ones.
  *
  * Input:  { idToken, bookingId }
  * Output: { ok: true, bookingId, refunded, already? } on success.
@@ -77,16 +89,18 @@ export default async function handler(req, res) {
       }
       // Idempotent: a processed refund never refunds again.
       if (b.refundProcessed === true) return { already: true, refunded: 0 };
-      if (b.status !== 'Pending' && b.status !== 'Cancelled') {
+      if (b.status !== 'Pending' && b.status !== 'Active' && b.status !== 'Cancelled') {
         const e = new Error('This booking cannot be refunded in its current state.');
         e.code = 'NOT_REFUNDABLE';
         throw e;
       }
-      // SERVER-TRUTH amount only: paidAmount was written by
+      // SERVER-TRUTH amounts only: paidAmount/platformFee were written by
       // /api/booking-create.js (or the legacy wallet flow). Never use a
       // client-set refundAmount field.
       const amt = Number(b.paidAmount || 0);
+      const fee = Number(b.platformFee || 0);
       const wasPending = b.status === 'Pending';
+      const wasActive = b.status === 'Active';
       if (!(amt > 0 && !b.barter)) {
         // Nothing refundable — close the intent so it never loops.
         tx.update(ref, { refundProcessed: true, refundStatus: 'nothing_to_refund', updatedAt: now });
@@ -99,36 +113,87 @@ export default async function handler(req, res) {
         e.code = 'BRAND_MISSING';
         throw e;
       }
-      tx.update(bizRef, { walletBalance: FieldValue.increment(amt) });
+      // Kill-fee decision (mirrors cron §1b, Cycle 13+14+15): when the BRAND
+      // cancels an ACTIVE booking, the brand is refunded paidAmount -
+      // platformFee and the creator gets 10% of paidAmount as a kill-fee,
+      // paid out of the retained fee portion. Active is detected directly
+      // (wasActive) or via the client-recorded statusBeforeCancel / the
+      // Active-policy refundAmount attached to a Cancelled doc.
+      const activePolicyRefund = amt - fee;
+      const claimsActive =
+        wasActive ||
+        b.statusBeforeCancel === 'Active' ||
+        (b.cancelledByBiz === true && fee > 0 &&
+          Number(b.refundAmount || -1) === activePolicyRefund);
+      let refundToBrand = amt;
+      let killFee = 0;
+      if (claimsActive && activePolicyRefund >= 0 && b.cancelledByBiz !== false) {
+        // Direct Active cancel via this endpoint, or a Cancelled doc
+        // carrying the Active policy — partial refund + kill-fee.
+        // (wasActive implies brand-initiated: only the owning brand reaches
+        // this endpoint, verified above.)
+        refundToBrand = activePolicyRefund;
+        killFee = Math.min(Math.round(amt * 0.10), fee);
+      }
+      tx.update(bizRef, { walletBalance: FieldValue.increment(refundToBrand) });
       // Unified ledger (same shape as cron §1): the refund lands in
       // walletTransactions with type 'refund' under the deterministic id
       // refund_{bookingId} — a retried request can never double-refund.
+      let refundNote = 'Refund: brand requested refund';
+      if (wasPending) refundNote += ' (cancelled before creator accepted)';
+      else if (wasActive) refundNote += ' (brand cancelled Active booking: platform fee retained, 10% kill-fee queued to creator)';
+      else if (killFee > 0) refundNote += ' (brand cancelled Active booking: platform fee retained, 10% kill-fee queued to creator)';
+      else refundNote += ' (booking declined)';
       tx.set(db.collection('walletTransactions').doc('refund_' + bookingId), {
         bizId: b.bizId, bookingId, type: 'refund',
-        amount: amt, createdAt: now,
-        note: 'Refund: brand requested refund' + (wasPending ? ' (cancelled before creator accepted)' : ' (booking declined)'),
+        amount: refundToBrand, createdAt: now,
+        note: refundNote,
       }, { merge: true });
+      // Queue the creator kill-fee for admin release (same payout queue as
+      // escrow releases). Deterministic id `killfee_{bookingId}` so a
+      // retried request can never queue a duplicate.
+      let killFeeQueued = false;
+      if (killFee > 0 && b.creatorId) {
+        tx.set(db.collection('payoutRequests').doc('killfee_' + bookingId), {
+          bookingId, creatorId: b.creatorId, bizId: b.bizId,
+          kind: 'kill_fee', amount: killFee, status: 'pending',
+          createdAt: now,
+          note: 'Kill-fee (10% of paid amount): brand cancelled an Active booking',
+        }, { merge: true });
+        killFeeQueued = true;
+      }
       const upd = {
         refundProcessed: true, refundStatus: 'completed',
-        refundedAt: now, refundReason: 'brand_request',
+        refundedAt: now, refundedAmount: refundToBrand, refundReason: 'brand_request',
         updatedAt: now,
       };
-      if (wasPending) {
+      if (killFeeQueued) {
+        upd.killFee = killFee;
+        upd.killFeeQueued = true;
+      }
+      if (wasPending || wasActive) {
         upd.status = 'Cancelled';
-        upd.cancelReason = 'Cancelled by brand — refund requested';
+        upd.cancelReason = wasActive
+          ? 'Cancelled by brand (Active booking) — partial refund, platform fee retained'
+          : 'Cancelled by brand — refund requested';
+        upd.cancelledByBiz = true;
+        if (wasActive) upd.statusBeforeCancel = 'Active';
         upd.autoCancelled = false;
       }
       tx.update(ref, upd);
-      return { refunded: amt, cancelled: wasPending };
+      return { refunded: refundToBrand, killFee: killFeeQueued ? killFee : 0, cancelled: wasPending || wasActive };
     });
 
     // Notifications (outside the txn; best-effort).
     try {
+      const refundNote = out.killFee > 0
+        ? ' (platform fee retained for Active cancellation)'
+        : '';
       await db.collection('bizNotifs').add({
         bizId: uid, type: 'refund_issued',
         title: 'Refund issued',
         body: 'Rs.' + Number(out.refunded || 0).toLocaleString('en-IN') +
-          ' was refunded to your Collancer wallet for booking ' + bookingId + '.',
+          ' was refunded to your Collancer wallet for booking ' + bookingId + refundNote + '.',
         bookingId, read: false, createdAt: FieldValue.serverTimestamp(),
       });
     } catch (e) {
@@ -139,7 +204,8 @@ export default async function handler(req, res) {
         type: 'refund_requested',
         title: 'Brand requested refund',
         body: 'Brand ' + uid + ' requested a refund for booking ' + bookingId +
-          ' — Rs.' + Number(out.refunded || 0).toLocaleString('en-IN') + ' credited to wallet.',
+          ' — Rs.' + Number(out.refunded || 0).toLocaleString('en-IN') + ' credited to wallet.' +
+          (out.killFee > 0 ? ' Kill-fee Rs.' + Number(out.killFee).toLocaleString('en-IN') + ' queued to creator.' : ''),
         bookingId, bizId: uid, resolved: false,
         createdAt: FieldValue.serverTimestamp(),
       });
@@ -149,12 +215,16 @@ export default async function handler(req, res) {
     if (out.cancelled) {
       try {
         const bSnap = await db.collection('bookings').doc(bookingId).get();
-        const creatorId = bSnap.exists ? (bSnap.data() || {}).creatorId : null;
+        const bd = bSnap.exists ? (bSnap.data() || {}) : {};
+        const creatorId = bd.creatorId || null;
         if (creatorId) {
+          const wasActiveCancel = bd.statusBeforeCancel === 'Active';
           await db.collection('creatorNotifs').add({
             creatorId, type: 'booking_cancelled',
             title: 'Booking cancelled',
-            body: 'The brand cancelled the booking and the escrow was returned. No action needed.',
+            body: wasActiveCancel
+              ? 'The brand cancelled an Active booking. A 10% kill-fee has been queued to your payouts.'
+              : 'The brand cancelled the booking and the escrow was returned. No action needed.',
             bookingId, read: false, createdAt: FieldValue.serverTimestamp(),
           });
         }

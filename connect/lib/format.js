@@ -1,8 +1,10 @@
 /* Formatting helpers. */
 
 export function inr(n) {
-  const v = Number(n) || 0;
-  return '₹' + v.toLocaleString('en-IN', { maximumFractionDigits: 0 });
+  const v = Number(n);
+  // NaN guard: non-numeric input renders as ₹0, never "₹NaN".
+  const safe = Number.isFinite(v) ? v : 0;
+  return '₹' + safe.toLocaleString('en-IN', { maximumFractionDigits: 0 });
 }
 
 export function inr2(n) {

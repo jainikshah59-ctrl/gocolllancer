@@ -30,7 +30,7 @@ function esc(t) {
     return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c];
   });
 }
-function inr(n) { return '\u20B9' + Number(n || 0).toLocaleString('en-IN'); }
+/* inr() removed — uses the single global from index.html (Item 28, Cycle 16). */
 function fmtCount(n) {
   n = Number(n || 0);
   if (n >= 10000000) return (n / 10000000).toFixed(1).replace(/\.0$/, '') + 'Cr';
@@ -191,14 +191,20 @@ function ensureCreatorDoc(u, email) {
     if (snap.exists) return;
     var local = (email.split('@')[0] || 'creator').toLowerCase().replace(/[^a-z0-9_.]/g, '').slice(0, 24) || 'creator';
     return reserveHandle(local, 0).then(function (handle) {
+      // Item 14 (Cycle 16): email/phone NEVER on the public creators doc
+      // (rules deny it) — they live in creators/{uid}/private/contact.
       return ref.set({
-        name: prettyName(local), phone: '', email: email,
+        name: prettyName(local),
         handle: handle, handleLower: handle.toLowerCase(),
         pfp: '', bio: '', niche: '', city: '', platform: 'Instagram',
         prices: {}, followers: 0, engagement: 0,
         verified: false, addedToCollancer: false, banned: false,
         verificationStatus: 'none', rating: 0, profileComplete: false,
         createdAt: FB.serverStamp(),
+      }).then(function () {
+        return DB.collection('creators').doc(u.uid).collection('private').doc('contact').set({
+          email: email, phone: '', updatedAt: FB.serverStamp(),
+        });
       });
     });
   });
@@ -213,7 +219,7 @@ function doEmailAuth() {
   if (note) note.textContent = reg ? 'Creating your creator account\u2026' : 'Logging you in\u2026';
   (reg ? FB.registerEmail(email, pass) : FB.loginEmail(email, pass))
     .then(function (cred) {
-      if (reg) return ensureCreatorDoc(cred.user, email);
+      if (reg) return ensureCreatorDoc(cred.user, email).then(function () { storeReferral(); });
     })
     .then(function () { if (note) note.textContent = ''; })
     .catch(function (err) { if (note) note.textContent = friendlyAuthError(err); });
@@ -226,6 +232,7 @@ function doGoogle() {
       var u = res && res.user ? res.user : FB.user();
       if (!u) throw new Error('no-user');
       return ensureCreatorDoc(u, u.email || '').then(function () {
+        storeReferral();
         if (note) note.textContent = '';
       });
     })
@@ -325,10 +332,14 @@ function wireEvents() {
     var t = e.target;
     if (!t || !t.closest) return;
     var q = function (s) { return t.closest(s); };
+    /* Item 10 (Cycle 16): honest feedback for stub buttons — the login screen's
+     * "Continue with Phone" carries data-toast but had no handler in this SPA,
+     * so it was a silent dead button. Show the message instead of nothing. */
+    var dt = t.closest('[data-toast]');
+    if (dt) { e.stopPropagation(); e.preventDefault(); toast(dt.getAttribute('data-toast')); return; }
     if (q('#s-login #sb')) { e.stopPropagation(); e.preventDefault(); doEmailAuth(); return; }
     var sbtn = q('#s-login .sbtn');
     if (sbtn && !/phone/i.test(sbtn.textContent)) { e.stopPropagation(); e.preventDefault(); doGoogle(); return; }
-    // Phone button: let the data-toast handler show "opens in the app" message
     if (q('#s-profile .black.red')) {
       e.stopPropagation(); e.preventDefault();
       FB.logout().then(function () { try { Collancer.go('login'); } catch (x) {} });
@@ -414,12 +425,12 @@ function paintProfile() {
     }
     /* No package prices set -> nudge the creator once per session, and show
      * a persistent banner on the Rate card ("Your packages") section until
-     * prices are set. Brands cannot book a creator with no prices. */
+     * prices are set. Custom offers and barter still work without prices. */
     var hasPrices = !!(d.prices && Object.keys(d.prices).length) || !!(d.packages && d.packages.length);
     if (!hasPrices) {
       if (!window._cconPriceNudge) {
         window._cconPriceNudge = true;
-        setTimeout(function () { toast('Set your package prices to get bookings.'); }, 1200);
+        setTimeout(function () { toast('Set your package prices to get booked faster.'); }, 1200);
       }
       try {
         var h2s = root.querySelectorAll('h2'), pkgCard = null;
@@ -429,7 +440,7 @@ function paintProfile() {
           banner.id = 'ccon-price-banner';
           banner.setAttribute('role', 'note');
           banner.style.cssText = 'margin:10px 0 0;padding:12px 14px;border-radius:16px;background:#fff7e6;border:1px solid #f2c979;font-size:13.5px;font-weight:700;color:#8a5a00;line-height:1.45';
-          banner.textContent = 'Set your package prices to get bookings. Brands see "Custom rates" on your profile until you do.';
+          banner.textContent = 'Set your package prices to get booked faster. Brands can still send you custom offers meanwhile \u2014 keep your profile ready.';
           var sub = pkgCard.querySelector('.sub');
           pkgCard.insertBefore(banner, sub ? sub.nextSibling : pkgCard.firstChild);
         }
@@ -441,6 +452,113 @@ function paintProfile() {
       } catch (e3) {}
     }
   } catch (e) { /* paint is best-effort */ }
+  try { prefillProfileInputs(); prefillPackageInputs(); wireSaveButtons(); paintChecklist(); } catch (e4) {}
+}
+
+/* Pre-fill profile inputs from creatorDoc (so Save edits, not blanks). */
+function prefillProfileInputs() {
+  if (!creatorDoc) return;
+  var d = creatorDoc;
+  var set = function (id, v) { var el = document.getElementById(id); if (el && v != null && String(v) !== '') el.value = v; };
+  set('cprof-name', d.name); set('cprof-handle', d.handle); set('cprof-bio', d.bio);
+  set('cprof-headline', d.headline); set('cprof-platform', d.platform); set('cprof-niche', d.niche);
+  set('cprof-city', d.city);
+  set('cprof-followers', d.followers); set('cprof-engagement', d.engagement);
+  set('cprof-views', d.avgViews); set('cprof-likes', d.avgLikes); set('cprof-reach', d.reach);
+  set('cprof-social', d.socialLink); set('cprof-youtube', d.youtube);
+  set('cprof-address', d.shippingAddress);
+  var barter = document.getElementById('cprof-barter');
+  if (barter && d.openToBarter === false) barter.classList.remove('on');
+  // WhatsApp lives in the private subcollection — load it once per paint.
+  try {
+    DB.collection('creators').doc(uid).collection('private').doc('contact').get().then(function (s) {
+      var w = document.getElementById('cprof-whatsapp');
+      if (w && s.exists && s.data().phone) w.value = s.data().phone;
+    });
+  } catch (e) {}
+}
+
+/* Pre-fill package cards from saved packages[]. */
+function prefillPackageInputs() {
+  if (!creatorDoc || !creatorDoc.packages) return;
+  var byKey = {};
+  creatorDoc.packages.forEach(function (p) { byKey[p.key] = p; });
+  document.querySelectorAll('.glass.pkg[data-pkg]').forEach(function (card) {
+    var p = byKey[card.getAttribute('data-pkg')];
+    if (!p) return;
+    var setV = function (sel, v) { var el = card.querySelector(sel); if (el && v != null) el.value = v; };
+    setV('.pkg-desc', p.description); setV('.pkg-price', p.price);
+    setV('.pkg-sale', p.salePrice); setV('.pkg-days', p.deliveryDays);
+  });
+}
+
+/* ---------------- 20k activation kit (Item 11 — Cycle 16) ----------------
+ * 4-step onboarding checklist (IG -> portfolio -> prices -> share link),
+ * shareable profile/invite links, and referral tracking. */
+function paintChecklist() {
+  var rows = document.getElementById('ccon-checklist-rows');
+  var count = document.getElementById('ccon-checklist-count');
+  if (!rows || !creatorDoc) return;
+  var d = creatorDoc;
+  var hasPrices = !!((d.prices && Object.keys(d.prices).length) || (d.packages && d.packages.length));
+  var hasPortfolio = !!((d.featuredMediaIds && d.featuredMediaIds.length) || (d.portfolio && d.portfolio.length));
+  var steps = [
+    { label: 'Connect Instagram', done: !!(d.instagram && d.instagram.username) },
+    { label: 'Pin portfolio posts', done: hasPortfolio },
+    { label: 'Set package prices', done: hasPrices },
+    { label: 'Share your profile link', done: !!d.profileShared },
+  ];
+  var doneCount = steps.filter(function (s) { return s.done; }).length;
+  var checkSvg = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 12.500l3.500 3.500 6.500-7"></path></svg>';
+  var circleSvg = '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="7"></circle></svg>';
+  rows.innerHTML = steps.map(function (s) {
+    return '<div class="row' + (s.done ? ' done' : '') + '"><div class="t3 ' + (s.done ? 'grn' : 'w') +
+      '" style="width: 25px; height: 25px">' + (s.done ? checkSvg : circleSvg) + '</div><span>' + s.label + '</span></div>';
+  }).join('');
+  if (count) count.textContent = doneCount + '/' + steps.length;
+}
+
+/* Shareable profile link: /c/<handle> with copy button. Marks profileShared
+ * so the checklist step completes. */
+function shareProfileLink() {
+  if (!creatorDoc || !creatorDoc.handle) { toast('Set your handle first.'); return; }
+  var url = location.origin + '/c/' + creatorDoc.handle;
+  var copy = function () {
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(url).then(function () { toast('Profile link copied!'); });
+      } else { throw 0; }
+    } catch (e) {
+      toast(url);
+    }
+  };
+  copy();
+  // Mark the share step done (best-effort).
+  try {
+    DB.collection('creators').doc(uid).update({ profileShared: true }).then(function () {
+      creatorDoc.profileShared = true; paintChecklist();
+    });
+  } catch (e2) {}
+}
+
+/* Referral: each creator gets a code (= their handle). The code is captured at
+ * signup and stored in the private contact doc. When a referred creator
+ * completes their first booking, the referrer earns Rs.100 credit (server-side
+ * via lib/referral.js). */
+function getReferralCode() {
+  try {
+    var m = /[?&]ref=([a-zA-Z0-9_.]+)/.exec(location.search || '');
+    return m ? m[1].toLowerCase() : null;
+  } catch (e) { return null; }
+}
+function storeReferral() {
+  var code = getReferralCode();
+  if (!code || !uid || !DB) return;
+  try {
+    DB.collection('creators').doc(uid).collection('private').doc('contact').set({
+      referredBy: code, updatedAt: FB.serverStamp(),
+    }, { merge: true });
+  } catch (e) {}
 }
 function profileCompleteness() {
   if (!creatorDoc) return 29;
@@ -452,6 +570,136 @@ function profileCompleteness() {
   if ((d.prices && Object.keys(d.prices).length) || (d.packages && d.packages.length)) score += 15;
   if (d.instagram && d.instagram.username) score += 30;
   return Math.min(100, score);
+}
+
+/* ---------------- profile + package saving (Items 8, 9 — Cycle 16) ---------------- */
+function _val(id) { var el = document.getElementById(id); return el ? (el.value || '').trim() : ''; }
+function _num(id) { var v = parseFloat(_val(id)); return isNaN(v) ? 0 : v; }
+
+/* Save profile: name/handle/bio/headline/platform/niche/city/stats/links.
+ * Handle change re-reserves creatorHandles/{newLower} (old handle doc stays
+ * reserved — rules allow only admin delete; the new reservation is what the
+ * uniqueness constraint needs). */
+function saveProfile() {
+  if (!uid || !DB) { toast('Please wait, loading\u2026'); return; }
+  var btn = document.getElementById('cprof-save');
+  if (btn) btn.disabled = true;
+  var name = _val('cprof-name'), handle = _val('cprof-handle').toLowerCase().replace(/[^a-z0-9_.]/g, '');
+  var bio = _val('cprof-bio'), headline = _val('cprof-headline');
+  var platform = _val('cprof-platform') || 'Instagram', niche = _val('cprof-niche'), city = _val('cprof-city');
+  if (!name) { toast('Please enter your display name.'); if (btn) btn.disabled = false; return; }
+  if (!handle) { toast('Please choose a handle.'); if (btn) btn.disabled = false; return; }
+  if (bio && bio.length < 10) { toast('Bio needs at least 10 characters.'); if (btn) btn.disabled = false; return; }
+  var oldHandle = (creatorDoc && creatorDoc.handleLower) || '';
+  var data = {
+    name: name.slice(0, 40), handle: handle, handleLower: handle,
+    bio: bio.slice(0, 500), headline: headline.slice(0, 80),
+    platform: platform, niche: niche, city: city,
+    followers: Math.max(0, _num('cprof-followers')),
+    engagement: Math.max(0, _num('cprof-engagement')),
+    avgViews: Math.max(0, _num('cprof-views')),
+    avgLikes: Math.max(0, _num('cprof-likes')),
+    reach: Math.max(0, _num('cprof-reach')),
+    socialLink: _val('cprof-social').slice(0, 200),
+    youtube: _val('cprof-youtube').slice(0, 200),
+    updatedAt: FB.serverStamp(),
+  };
+  var write = function () {
+    return DB.collection('creators').doc(uid).update(data).then(function () {
+      creatorDoc = Object.assign({}, creatorDoc, data);
+      toast('Profile saved.');
+      try { if (window.render) window.render(); } catch (e) {}
+    });
+  };
+  var done = function () { if (btn) btn.disabled = false; };
+  // Handle changed -> reserve the new handle first (uniqueness), then save.
+  if (handle !== oldHandle) {
+    reserveHandle(handle, 0).then(function (h) {
+      data.handle = h; data.handleLower = h;
+      return write();
+    }).then(done, function () { toast('Could not save profile. Try again.'); done(); });
+  } else {
+    write().then(done, function () { toast('Could not save profile. Try again.'); done(); });
+  }
+}
+
+/* Save packages: reads every .glass.pkg[data-pkg] card (toggle + desc +
+ * price + sale + days) and persists packages[] + prices{}. */
+var PKG_LABELS = { story: '1 \u00D7 Instagram Story', videopost: '1 \u00D7 Video Post', reel: '1 \u00D7 Instagram Reel', personalvideo: '1 \u00D7 Personal Video', adshoot: '1 \u00D7 Personal Ad Shoot', ytshort: '1 \u00D7 YouTube Short' };
+function savePackages() {
+  if (!uid || !DB) { toast('Please wait, loading\u2026'); return; }
+  var btn = document.getElementById('cprof-savepkg');
+  if (btn) btn.disabled = true;
+  var cards = document.querySelectorAll('.glass.pkg[data-pkg]');
+  var packages = [], prices = {};
+  cards.forEach(function (card) {
+    var key = card.getAttribute('data-pkg');
+    var on = card.classList.contains('on') || !!card.querySelector('.sw.on');
+    var desc = (card.querySelector('.pkg-desc') || {}).value || '';
+    var price = parseFloat((card.querySelector('.pkg-price') || {}).value || '');
+    var sale = parseFloat((card.querySelector('.pkg-sale') || {}).value || '');
+    var days = parseInt((card.querySelector('.pkg-days') || {}).value || '', 10);
+    if (!on) return; // disabled package -> not offered
+    if (isNaN(price) || price < 100) return; // minimum package \u20B9100 (nano trap guard)
+    var pkg = {
+      key: key, label: PKG_LABELS[key] || key,
+      description: String(desc).slice(0, 500),
+      price: Math.round(price),
+      salePrice: (!isNaN(sale) && sale > 0 && sale < price) ? Math.round(sale) : null,
+      deliveryDays: (!isNaN(days) && days > 0) ? days : null,
+    };
+    packages.push(pkg);
+    prices[key] = pkg.salePrice != null ? pkg.salePrice : pkg.price;
+  });
+  DB.collection('creators').doc(uid).update({
+    packages: packages, prices: prices, updatedAt: FB.serverStamp(),
+  }).then(function () {
+    creatorDoc = Object.assign({}, creatorDoc, { packages: packages, prices: prices });
+    toast(packages.length ? 'Packages saved \u2014 you are bookable!' : 'Packages saved.');
+    try { if (window.render) window.render(); } catch (e) {}
+    if (btn) btn.disabled = false;
+  }).catch(function () {
+    toast('Could not save packages. Try again.');
+    if (btn) btn.disabled = false;
+  });
+}
+
+/* Save account: WhatsApp -> private contact subcollection (Item 14: never on
+ * the public doc), shipping address + barter flag -> public doc. */
+function saveAccount() {
+  if (!uid || !DB) { toast('Please wait, loading\u2026'); return; }
+  var btn = document.getElementById('cprof-saveacct');
+  if (btn) btn.disabled = true;
+  var wa = _val('cprof-whatsapp').replace(/\D/g, '').slice(0, 15);
+  var addr = _val('cprof-address').slice(0, 500);
+  var barterEl = document.getElementById('cprof-barter');
+  var barter = barterEl ? barterEl.classList.contains('on') : true;
+  var done = function () { if (btn) btn.disabled = false; };
+  DB.collection('creators').doc(uid).collection('private').doc('contact').set({
+    phone: wa, updatedAt: FB.serverStamp(),
+  }, { merge: true }).then(function () {
+    return DB.collection('creators').doc(uid).update({
+      shippingAddress: addr, openToBarter: barter, updatedAt: FB.serverStamp(),
+    });
+  }).then(function () {
+    creatorDoc = Object.assign({}, creatorDoc, { shippingAddress: addr, openToBarter: barter });
+    toast('Account details saved.');
+    done();
+  }).catch(function () { toast('Could not save. Try again.'); done(); });
+}
+
+/* Wire the save buttons (creator app has no global data-a dispatcher). */
+function wireSaveButtons() {
+  try {
+    var sp = document.getElementById('cprof-save');
+    if (sp && !sp._wired) { sp._wired = true; sp.addEventListener('click', saveProfile); }
+    var pk = document.getElementById('cprof-savepkg');
+    if (pk && !pk._wired) { pk._wired = true; pk.addEventListener('click', savePackages); }
+    var ac = document.getElementById('cprof-saveacct');
+    if (ac && !ac._wired) { ac._wired = true; ac.addEventListener('click', saveAccount); }
+    var sh = document.getElementById('ccon-share');
+    if (sh && !sh._wired) { sh._wired = true; sh.addEventListener('click', shareProfileLink); }
+  } catch (e) {}
 }
 
 /* ---------------- Instagram connect ---------------- */
