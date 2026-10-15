@@ -193,7 +193,7 @@ export default async function handler(req, res) {
     try {
       if (bd.creatorId) {
         const { maybeCreditReferral } = await import('../lib/referral.js');
-        await maybeCreditReferral(db, { creatorId: bd.creatorId, bookingId, bookingType: bd.type });
+        await maybeCreditReferral(db, { creatorId: bd.creatorId, bookingId, bookingType: bd.type, bizId: bd.bizId });
       }
     } catch (e) {
       console.error('[booking-action] referral', String(e && e.message || e).slice(0, 160));

@@ -119,13 +119,42 @@ export default async function handler(req, res) {
     // for admin release). Active is detected via the client-recorded
     // statusBeforeCancel, with the client-attached refundAmount as backstop.
     // Pending cancels and creator rejects always get a full refund.
+    //
+    // Two pickup queries (Item 24, Cycle 16): creator-reject writes
+    // refundProcessed=false explicitly, but brand cancelBooking() attaches
+    // refundRequested/refundAmount/statusBeforeCancel/cancelledByBiz WITHOUT
+    // ever writing refundProcessed — so the == false query alone missed
+    // every brand-cancelled booking and the escrow sat in limbo. The second
+    // query picks up intents by refundRequested. Doc ids are deduped; the
+    // txn re-checks refundProcessed === true -> skip, so a doc matching both
+    // queries can never double-refund.
     const rejectSnap = await db.collection('bookings')
       .where('status', '==', 'Cancelled')
       .where('refundProcessed', '==', false)
       .limit(50)
       .get();
+    // Composite index bookings(status ASC, refundRequested ASC) — see
+    // firestore.indexes.json. Deploy it with:
+    //   firebase deploy --only firestore:indexes
+    // Until it is deployed this query throws FAILED_PRECONDITION; catch it
+    // so the rest of the cron (auto-cancel, auto-approve, reconcile,
+    // pro-expiry) keeps running on the legacy query alone.
+    let brandCancelSnap = { docs: [] };
+    try {
+      brandCancelSnap = await db.collection('bookings')
+        .where('status', '==', 'Cancelled')
+        .where('refundRequested', '==', true)
+        .limit(50)
+        .get();
+    } catch (e) {
+      console.error('[booking-deadlines] §1b brand-cancel query (index missing?)',
+        String((e && e.message) || e).slice(0, 160));
+    }
+    const refundDocs = new Map();
+    for (const d of rejectSnap.docs) refundDocs.set(d.id, d);
+    for (const d of brandCancelSnap.docs) refundDocs.set(d.id, d);
 
-    for (const doc of rejectSnap.docs) {
+    for (const doc of refundDocs.values()) {
       // Transaction-guarded: re-check refundProcessed INSIDE the transaction
       // so concurrent/duplicate cron runs can't double-credit the wallet.
       const outcome = await db.runTransaction(async (tx) => {
@@ -320,7 +349,7 @@ export default async function handler(req, res) {
             const { maybeCreditReferral } = await import('../lib/referral.js');
             await maybeCreditReferral(db, {
               creatorId: outcome.creatorId, bookingId: doc.id,
-              bookingType: (doc.data() || {}).type,
+              bookingType: (doc.data() || {}).type, bizId: (doc.data() || {}).bizId,
             });
           } catch (e) {
             console.error('[booking-deadlines] referral auto-approve', String(e && e.message || e).slice(0, 160));
