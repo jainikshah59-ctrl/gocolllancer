@@ -3,10 +3,13 @@
  * Env: CASHFREE_APP_ID, CASHFREE_SECRET_KEY, CASHFREE_ENV ('test' | 'production', default 'test').
  * Input:  { amount, purpose, creatorId, creatorPrice, label, paymentMethod, customer: { email, phone } }
  *          (`customer.id` is ignored — customer_id is always the verified UID.)
- *          `paymentMethod` is an optional hint ('upi' | 'card' | 'netbanking'):
- *          when 'upi', the UPI MDR (0.4% on totals >= Rs.2,000, capped Rs.300)
- *          is added to the order amount. The server recomputes everything —
- *          the hint only selects the fee schedule.
+ *          `paymentMethod` is an optional hint ('upi' | 'card' | 'netbanking'
+ *          | 'wallet'). Item 3 (Cycle 19): the hint is client-controlled and
+ *          unverifiable pre-payment, so the UPI MDR (0.4% on totals >=
+ *          Rs.2,000, capped Rs.300) now applies BY DEFAULT on every gateway
+ *          order — the hint can no longer dodge it. Only 'wallet' (internal
+ *          ledger top-ups, which never touch the gateway) is exempt. The
+ *          server recomputes everything from the creator's rate card.
  * Output: { configured: true, payment_session_id, order_id, order_status, order_amount, purpose, env }
  *         or { configured: false } when keys are not set (frontend falls back to demo simulation).
  *
@@ -107,9 +110,10 @@ export default async function handler(req, res) {
       const bizSnap = await db.collection('businesses').doc(uid).get();
       isPro = isProActiveBiz(bizSnap.exists ? bizSnap.data() : null);
     } catch { return json(res, 500, { error: 'brand_lookup_failed' }); }
-    // UPI MDR (Item 3, Cycle 17): when the brand intends to pay via UPI and
-    // the subtotal is >= Rs.2,000, add 0.4% (capped Rs.300) to the total.
-    // The client hints the method; the server recomputes everything.
+    // UPI MDR (Item 3, Cycle 19): the paymentMethod hint is client-controlled
+    // and unverifiable before the gateway reports the real method, so the MDR
+    // (0.4% on totals >= Rs.2,000, capped Rs.300) applies BY DEFAULT here —
+    // canonicalTotal ignores the hint except for 'wallet' (internal ledger).
     const paymentMethod = String(body.paymentMethod || '').toLowerCase();
     chargeAmount = canonicalTotal(isPro, creatorPrice, { paymentMethod }).total;
     if (!(chargeAmount > 0)) return json(res, 400, { error: 'bad_total' });

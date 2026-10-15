@@ -15,7 +15,9 @@
  *  (c) server-compute expected total from booking.creatorPrice:
  *      5% Pro discount off the creator price first (brand isPro read
  *      server-side from businesses/{uid}), then 12% fee on the discounted
- *      price. Reject if |order_amount - expectedTotal| > 1.
+ *      price. Reject if |order_amount - expectedTotal| > 1, where the
+ *      expected total also tolerates the UPI MDR line (Item 2, Cycle 19):
+ *      the order may equal expectedTotal OR expectedTotal + upiMdrCharge.
  *  (d) order registry payment_orders/{orderId}: 409 REUSE only if the row
  *      was already consumed for a booking ('booked'/'consumed' or it carries
  *      a bookingId). /api/cashfree-order pre-registers every order with
@@ -25,7 +27,7 @@
  */
 import { getAdmin, verifyUid, readBody } from '../lib/firebaseAdmin.js';
 import { FieldValue } from 'firebase-admin/firestore';
-import { isProActiveBiz } from '../lib/pricing.js';
+import { isProActiveBiz, upiMdrCharge } from '../lib/pricing.js';
 import { resolveRebookId } from '../lib/rebook.js';
 
 const CF_API_VERSION = '2023-08-01';
@@ -175,8 +177,14 @@ export default async function handler(req, res) {
   const discounted = creatorPrice - discount;
   const fee = Math.round(discounted * 0.12);
   const expectedTotal = discounted + fee;
+  // Item 2 (Cycle 19, MONET): /api/cashfree-order adds the UPI MDR (0.4% on
+  // totals >= Rs.2,000, capped Rs.300) by default, so a legitimately paid
+  // order may equal expectedTotal OR expectedTotal + MDR. Tolerate both —
+  // rejecting the MDR-inclusive amount would strand the brand's money after
+  // it was already collected (400 amount_mismatch, booking never created).
+  const expectedWithMdr = expectedTotal + upiMdrCharge(expectedTotal);
   const orderAmount = num(order.order_amount);
-  if (Math.abs(orderAmount - expectedTotal) > 1) {
+  if (Math.abs(orderAmount - expectedTotal) > 1 && Math.abs(orderAmount - expectedWithMdr) > 1) {
     return json(res, 400, { error: 'amount_mismatch', expected: expectedTotal, got: orderAmount });
   }
   if (!(expectedTotal > 0)) return json(res, 400, { error: 'bad_total' });

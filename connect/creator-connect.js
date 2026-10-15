@@ -560,6 +560,7 @@ function prefillProfileInputs() {
   set('cprof-name', d.name); set('cprof-handle', d.handle); set('cprof-bio', d.bio);
   set('cprof-headline', d.headline); set('cprof-platform', d.platform); set('cprof-niche', d.niche);
   set('cprof-city', d.city);
+  set('cprof-languages', Array.isArray(d.languages) ? d.languages.join(', ') : d.languages);
   set('cprof-followers', d.followers); set('cprof-engagement', d.engagement);
   set('cprof-views', d.avgViews); set('cprof-likes', d.avgLikes); set('cprof-reach', d.reach);
   set('cprof-social', d.socialLink); set('cprof-youtube', d.youtube);
@@ -714,6 +715,9 @@ function saveProfile() {
   var name = _val('cprof-name'), handle = _val('cprof-handle').toLowerCase().replace(/[^a-z0-9_.]/g, '');
   var bio = _val('cprof-bio'), headline = _val('cprof-headline');
   var platform = _val('cprof-platform') || 'Instagram', niche = _val('cprof-niche'), city = _val('cprof-city');
+  /* Item 20 (Cycle 19): languages the creator works in — stored as an array
+   * so the brand discovery language filter can match. */
+  var languages = _val('cprof-languages').split(',').map(function (s) { return s.trim().slice(0, 30); }).filter(Boolean).slice(0, 10);
   if (!name) { toast('Please enter your display name.'); if (btn) btn.disabled = false; return; }
   if (!handle) { toast('Please choose a handle.'); if (btn) btn.disabled = false; return; }
   if (bio && bio.length < 10) { toast('Bio needs at least 10 characters.'); if (btn) btn.disabled = false; return; }
@@ -722,6 +726,7 @@ function saveProfile() {
     name: name.slice(0, 40), handle: handle, handleLower: handle,
     bio: bio.slice(0, 500), headline: headline.slice(0, 80),
     platform: platform, niche: niche, city: city,
+    languages: languages,
     followers: Math.max(0, _num('cprof-followers')),
     engagement: Math.max(0, _num('cprof-engagement')),
     avgViews: Math.max(0, _num('cprof-views')),
@@ -944,7 +949,7 @@ function loadBookings() {
       var ref = DB.collection('bookings').doc(booking.id);
       if (action === 'accept') {
         var patch = { status: 'Active', acceptedAt: FB.serverStamp(), acceptedByCreator: true, seenByCreator: true };
-        ref.update(patch).then(notifyBiz).catch(function () { toast('Could not update booking. Please try again.'); });
+        ref.update(patch).then(function () { notifyBiz(); notifyBookingParty('booking_accepted', booking.id); }).catch(function () { toast('Could not update booking. Please try again.'); });
         return;
       }
       // Item 13: accepting a custom offer uses the same rule-safe
@@ -954,6 +959,7 @@ function loadBookings() {
         var opatch = { status: 'Active', acceptedAt: FB.serverStamp(), acceptedByCreator: true, seenByCreator: true };
         ref.update(opatch).then(function () {
           try { sendChatMessage(booking.id, 'Accepted your custom offer of \u20B9' + Number(booking.offerPrice || 0).toLocaleString('en-IN') + '.'); } catch (e) {}
+          notifyBookingParty('booking_accepted', booking.id);
           // REMOVED (Cycle 13+14+15, Item 7): the bizNotifs write here was
           // 100% permission-denied (rules: bizNotifs create requires
           // bizId == caller's own uid). Server writes notifications instead.
@@ -992,6 +998,18 @@ function loadBookings() {
         // bizNotifs for their own bizId, and this was the brand's. Kept as
         // a no-op so the .then(notifyBiz) call chain still settles cleanly.
       }
+      /* Item 15 (Cycle 19): server-owned cross-party notification. The
+       * client cannot write the brand's feed (rules), so after our own
+       * state write succeeds we ask /api/booking-action to notify the
+       * other side via the Admin SDK. Best-effort — never blocks UI. */
+      function notifyBookingParty(kind, bookingId) {
+        try {
+          if (window.FB && FB.api) {
+            FB.api('booking-action', { action: 'notify', kind: kind, bookingId: String(bookingId || '') })
+              .catch(function () {});
+          }
+        } catch (e) {}
+      }
     };
   } catch (e) {}
 }
@@ -1023,6 +1041,35 @@ function paintEarnings() {
       var avEl = $('#pw .av b', root);
       if (avEl) avEl.textContent = inr(Math.round(avail));
       root._avail = avail;
+    } catch (e) {}
+    // Item 10 (Cycle 19): TDS/194J — show FY payout total. Reads the
+    // server-maintained creators/{uid}.payoutFY{,Total}; created on demand
+    // with the existing .m style (no new visual language).
+    try {
+      DB.collection('creators').doc(uid).get().then(function (csnap) {
+        var cd = csnap.exists ? (csnap.data() || {}) : {};
+        var fy = cd.payoutFY, total = Number(cd.payoutFYTotal || 0);
+        var line = root.querySelector('#fyline');
+        if (!line) {
+          var bal = root.querySelector('.glass.bal');
+          var anchor = bal && bal.querySelector('.m');
+          if (bal && anchor) {
+            line = document.createElement('div');
+            line.className = 'm'; line.id = 'fyline';
+            line.style.marginTop = '6px';
+            anchor.parentNode.insertBefore(line, anchor.nextSibling);
+          }
+        }
+        if (line) {
+          if (fy) {
+            line.textContent = 'FY ' + fy + ' payouts: ' + inr(Math.round(total)) +
+              (cd.tdsApplicable ? ' · TDS applicable' : '');
+            line.style.display = '';
+          } else {
+            line.style.display = 'none';
+          }
+        }
+      }).catch(function () {});
     } catch (e) {}
     paintPayoutHistory();
   }).catch(function () {});

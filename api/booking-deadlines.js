@@ -14,10 +14,12 @@
  * 2. PendingCompletion bookings past reviewDeadline → auto-approve + payout creator
  * 3. Reconcile paid-but-unbooked Cashfree orders → unclaimed_payments + admin notif
  * 4. Expire Business Pro subscriptions past their 30-day term.
+ * 5. DPDP data deletion requests (deletionRequests, status pending) → erase
+ *    profile/contact/tokens, anonymize financial rows (Item 7, Cycle 19).
  */
 import { getAdmin } from '../lib/firebaseAdmin.js';
 import { FieldValue } from 'firebase-admin/firestore';
-import { creatorShare } from '../lib/pricing.js';
+import { creatorShare, fyLabel, TDS_THRESHOLD_INR } from '../lib/pricing.js';
 
 export default async function handler(req, res) {
   // Auth (C6#1/C7#1): Vercel Cron sends `x-vercel-cron: 1` on scheduled
@@ -42,12 +44,24 @@ export default async function handler(req, res) {
     const now = new Date();
     const results = { cancelled: [], approved: [] };
 
-    // 1. Auto-cancel expired Pending bookings
-    const pendingSnap = await db.collection('bookings')
-      .where('status', '==', 'Pending')
-      .where('acceptDeadline', '<', now)
-      .limit(50)
-      .get();
+    // 1. Auto-cancel expired Pending bookings.
+    // Composite index bookings(status ASC, acceptDeadline ASC) — declared in
+    // firestore.indexes.json; deploy with `firebase deploy --only
+    // firestore:indexes`. Until it is deployed this query throws
+    // FAILED_PRECONDITION; catch it (like §1b below) so one missing index
+    // cannot 500 the entire cron run (no refunds, no auto-approve, no
+    // pro-expiry that day).
+    let pendingSnap = { docs: [] };
+    try {
+      pendingSnap = await db.collection('bookings')
+        .where('status', '==', 'Pending')
+        .where('acceptDeadline', '<', now)
+        .limit(50)
+        .get();
+    } catch (e) {
+      console.error('[booking-deadlines] §1 auto-cancel query (index missing?)',
+        String((e && e.message) || e).slice(0, 160));
+    }
 
     for (const doc of pendingSnap.docs) {
       // Transaction-guarded: the refund credit + refundProcessed flip happen
@@ -128,11 +142,21 @@ export default async function handler(req, res) {
     // query picks up intents by refundRequested. Doc ids are deduped; the
     // txn re-checks refundProcessed === true -> skip, so a doc matching both
     // queries can never double-refund.
-    const rejectSnap = await db.collection('bookings')
-      .where('status', '==', 'Cancelled')
-      .where('refundProcessed', '==', false)
-      .limit(50)
-      .get();
+    // Composite index bookings(status ASC, refundProcessed ASC) — declared in
+    // firestore.indexes.json; deploy with `firebase deploy --only
+    // firestore:indexes`. Guarded like the second pickup query below: a
+    // missing index must not 500 the entire cron run.
+    let rejectSnap = { docs: [] };
+    try {
+      rejectSnap = await db.collection('bookings')
+        .where('status', '==', 'Cancelled')
+        .where('refundProcessed', '==', false)
+        .limit(50)
+        .get();
+    } catch (e) {
+      console.error('[booking-deadlines] §1b creator-reject query (index missing?)',
+        String((e && e.message) || e).slice(0, 160));
+    }
     // Composite index bookings(status ASC, refundRequested ASC) — see
     // firestore.indexes.json. Deploy it with:
     //   firebase deploy --only firestore:indexes
@@ -227,6 +251,18 @@ export default async function handler(req, res) {
             createdAt: now,
             note: 'Kill-fee (10% of paid amount): brand cancelled an Active booking',
           }, { merge: true });
+          // Item 10 (Cycle 19): kill-fee is creator income — count it toward
+          // the FY payout total for TDS tracking.
+          const cRef = db.collection('creators').doc(b.creatorId);
+          const cSnap = await tx.get(cRef);
+          const cData = cSnap.exists ? (cSnap.data() || {}) : {};
+          const fy = fyLabel(now);
+          const fyTotal = (cData.payoutFY === fy ? Number(cData.payoutFYTotal || 0) : 0) + killFee;
+          tx.set(cRef, {
+            payoutFY: fy, payoutFYTotal: fyTotal,
+            tdsApplicable: fyTotal >= TDS_THRESHOLD_INR,
+            updatedAt: now,
+          }, { merge: true });
         }
 
         const bookingPatch = {
@@ -274,12 +310,22 @@ export default async function handler(req, res) {
       }
     }
 
-    // 2. Auto-approve expired PendingCompletion bookings
-    const reviewSnap = await db.collection('bookings')
-      .where('status', '==', 'PendingCompletion')
-      .where('reviewDeadline', '<', now)
-      .limit(50)
-      .get();
+    // 2. Auto-approve expired PendingCompletion bookings.
+    // Composite index bookings(status ASC, reviewDeadline ASC) — declared in
+    // firestore.indexes.json; deploy with `firebase deploy --only
+    // firestore:indexes`. Guarded like §1/§1b: a missing index must not 500
+    // the entire cron run.
+    let reviewSnap = { docs: [] };
+    try {
+      reviewSnap = await db.collection('bookings')
+        .where('status', '==', 'PendingCompletion')
+        .where('reviewDeadline', '<', now)
+        .limit(50)
+        .get();
+    } catch (e) {
+      console.error('[booking-deadlines] §2 auto-approve query (index missing?)',
+        String((e && e.message) || e).slice(0, 160));
+    }
 
     for (const doc of reviewSnap.docs) {
       // Transaction-guarded: re-check status/autoApproved INSIDE the txn so
@@ -320,6 +366,18 @@ export default async function handler(req, res) {
                 : 'Auto-approved booking payout — share below the Rs.100 payout floor, accumulates with future payouts',
             }, { merge: true });
             payoutCreated = true;
+            // Item 10 (Cycle 19): TDS/194J — track per-creator FY payout
+            // totals. Same txn, so the total can never drift from the queue.
+            const cRef = db.collection('creators').doc(b.creatorId);
+            const cSnap = await tx.get(cRef);
+            const cData = cSnap.exists ? (cSnap.data() || {}) : {};
+            const fy = fyLabel(now);
+            const fyTotal = (cData.payoutFY === fy ? Number(cData.payoutFYTotal || 0) : 0) + share;
+            tx.set(cRef, {
+              payoutFY: fy, payoutFYTotal: fyTotal,
+              tdsApplicable: fyTotal >= TDS_THRESHOLD_INR,
+              updatedAt: now,
+            }, { merge: true });
           }
         }
         return { approved: true, payoutCreated, share, payoutStatus, creatorId: b.creatorId || null };
@@ -470,6 +528,192 @@ export default async function handler(req, res) {
       console.error('[booking-deadlines] pro expiry pass', String(e && e.message || e).slice(0, 160));
     }
     results.proExpired = proExpired;
+
+    // 5. DPDP data deletion requests (Item 7, Cycle 19).
+    // The ?legal=data-deletion UI queues requests in `deletionRequests`
+    // { uid, email, status:'pending', createdAt }. This pass processes them:
+    // erase profile/contact/tokens, anonymize financial rows (keep amounts
+    // for tax/audit, drop PII). 30-day SLA — runs on the next daily cron
+    // after a 24h grace period (accidental requests).
+    //
+    // Collections touched:
+    //   creators/{uid}                       -> DELETE (profile, contact, tokens)
+    //   creators/{uid}/private/contact       -> DELETE (subcollection)
+    //   businesses/{uid}                    -> DELETE (same uid may be a brand too)
+    //   creatorHandles/* (creatorId==uid)    -> DELETE (handle reservation)
+    //   bookings (creatorId/bizId==uid)      -> ANONYMIZE (keep amounts/status)
+    //   creatorNotifs (creatorId==uid)       -> DELETE
+    //   bizNotifs (bizId==uid)               -> DELETE
+    //   walletTransactions (bizId==uid)      -> ANONYMIZE (keep amount/type)
+    //   payoutRequests (creatorId==uid)      -> ANONYMIZE (keep amount/status)
+    //   deletionRequests/{reqId}             -> status:'completed'
+    const deletion = { processed: [], skipped: [] };
+    try {
+      const delSnap = await db.collection('deletionRequests')
+        .where('status', '==', 'pending')
+        .limit(20)
+        .get();
+      const graceMs = 24 * 3600 * 1000;
+      for (const reqDoc of delSnap.docs) {
+        const rq = reqDoc.data() || {};
+        const uid = String(rq.uid || '');
+        if (!uid) {
+          await reqDoc.ref.update({ status: 'invalid', processedAt: now, updatedAt: now });
+          deletion.skipped.push(reqDoc.id + ':no-uid');
+          continue;
+        }
+        // 24h grace period from request time.
+        const created = rq.createdAt;
+        const createdMs = created && typeof created.toMillis === 'function'
+          ? created.toMillis() : Date.parse(created);
+        if (createdMs && (now.getTime() - createdMs) < graceMs) {
+          deletion.skipped.push(reqDoc.id + ':grace-period');
+          continue;
+        }
+        // Safety: never delete a user with unsettled money. Active money
+        // (wallet balance, pending payouts, non-terminal bookings) blocks
+        // deletion until settled — the UI already warns about this.
+        let blocked = '';
+        try {
+          const [bizSnap, paySnap, bookSnap] = await Promise.all([
+            db.collection('businesses').doc(uid).get(),
+            db.collection('payoutRequests').where('creatorId', '==', uid)
+              .where('status', 'in', ['pending', 'accumulating']).limit(1).get(),
+            db.collection('bookings')
+              .where('creatorId', '==', uid)
+              .where('status', 'in', ['Pending', 'Active', 'PendingCompletion']).limit(1).get(),
+          ]);
+          const bizData = bizSnap.exists ? (bizSnap.data() || {}) : {};
+          if (Number(bizData.walletBalance || 0) > 0) blocked = 'wallet_balance';
+          else if (!paySnap.empty) blocked = 'pending_payouts';
+          else if (!bookSnap.empty) blocked = 'active_bookings';
+          if (!blocked) {
+            const bbSnap = await db.collection('bookings')
+              .where('bizId', '==', uid)
+              .where('status', 'in', ['Pending', 'Active', 'PendingCompletion']).limit(1).get();
+            if (!bbSnap.empty) blocked = 'active_bookings';
+          }
+        } catch (e) {
+          // If the safety check itself fails, do NOT delete (fail-closed).
+          console.error('[booking-deadlines] deletion safety check', String(e && e.message || e).slice(0, 160));
+          deletion.skipped.push(reqDoc.id + ':safety-check-failed');
+          continue;
+        }
+        if (blocked) {
+          await reqDoc.ref.update({
+            status: 'blocked', blockedReason: blocked, updatedAt: now,
+          });
+          try {
+            await db.collection('adminNotifs').add({
+              type: 'deletion_blocked',
+              title: 'Data deletion blocked — unsettled money',
+              body: 'Deletion request ' + reqDoc.id + ' (uid ' + uid + ') blocked: ' + blocked +
+                '. Settle first, then re-queue.',
+              uid, resolved: false, createdAt: now,
+            });
+          } catch (e) {}
+          deletion.skipped.push(reqDoc.id + ':blocked-' + blocked);
+          continue;
+        }
+
+        // Execute deletion in batches (500 writes/batch limit).
+        const BATCH = 400;
+        let batch = db.batch();
+        let ops = 0;
+        const flush = async () => { if (ops > 0) { await batch.commit(); batch = db.batch(); ops = 0; } };
+        const del = (ref) => { batch.delete(ref); ops++; };
+        const upd = (ref, data) => { batch.update(ref, data); ops++; };
+        const maybeFlush = async () => { if (ops >= BATCH) await flush(); };
+
+        // 1. Creator + business profile docs + private contact subcollection.
+        del(db.collection('creators').doc(uid));
+        del(db.collection('businesses').doc(uid));
+        try {
+          const contactSnap = await db.collection('creators').doc(uid).collection('private').get();
+          for (const d of contactSnap.docs) { del(d.ref); await maybeFlush(); }
+        } catch (e) {}
+        try {
+          const bContactSnap = await db.collection('businesses').doc(uid).collection('private').get();
+          for (const d of bContactSnap.docs) { del(d.ref); await maybeFlush(); }
+        } catch (e) {}
+
+        // 2. Handle reservations.
+        try {
+          const hSnap = await db.collection('creatorHandles').where('creatorId', '==', uid).get();
+          for (const d of hSnap.docs) { del(d.ref); await maybeFlush(); }
+        } catch (e) {}
+
+        // 3. Notifications.
+        for (const [coll, field] of [['creatorNotifs', 'creatorId'], ['bizNotifs', 'bizId']]) {
+          try {
+            const nSnap = await db.collection(coll).where(field, '==', uid).limit(200).get();
+            for (const d of nSnap.docs) { del(d.ref); await maybeFlush(); }
+          } catch (e) {}
+        }
+
+        // 4. Bookings — ANONYMIZE (financial rows retained for tax/audit).
+        for (const field of ['creatorId', 'bizId']) {
+          try {
+            const bSnap = await db.collection('bookings').where(field, '==', uid).limit(200).get();
+            for (const d of bSnap.docs) {
+              upd(d.ref, {
+                [field]: 'deleted',
+                deletedPII: true, updatedAt: now,
+              });
+              await maybeFlush();
+            }
+          } catch (e) {}
+        }
+
+        // 5. Wallet transactions — ANONYMIZE (keep amount/type for ledger).
+        try {
+          const wSnap = await db.collection('walletTransactions').where('bizId', '==', uid).limit(200).get();
+          for (const d of wSnap.docs) {
+            upd(d.ref, { bizId: 'deleted', note: '[deleted]', deletedPII: true, updatedAt: now });
+            await maybeFlush();
+          }
+        } catch (e) {}
+
+        // 6. Payout requests — ANONYMIZE (keep amount/status for audit).
+        try {
+          const pSnap = await db.collection('payoutRequests').where('creatorId', '==', uid).limit(200).get();
+          for (const d of pSnap.docs) {
+            upd(d.ref, {
+              creatorId: 'deleted', bizId: 'deleted',
+              note: '[deleted]', deletedPII: true, updatedAt: now,
+            });
+            await maybeFlush();
+          }
+        } catch (e) {}
+        try {
+          const pbSnap = await db.collection('payoutRequests').where('bizId', '==', uid).limit(200).get();
+          for (const d of pbSnap.docs) {
+            upd(d.ref, { bizId: 'deleted', note: '[deleted]', deletedPII: true, updatedAt: now });
+            await maybeFlush();
+          }
+        } catch (e) {}
+
+        await flush();
+
+        // 7. Mark the request completed.
+        await reqDoc.ref.update({
+          status: 'completed', processedAt: now, updatedAt: now,
+          processedBy: 'cron',
+        });
+        deletion.processed.push(reqDoc.id);
+        try {
+          await db.collection('adminNotifs').add({
+            type: 'deletion_completed',
+            title: 'Data deletion completed',
+            body: 'Deletion request ' + reqDoc.id + ' (uid ' + uid + ') processed. Profile erased; financial rows anonymized.',
+            uid, resolved: false, createdAt: now,
+          });
+        } catch (e) {}
+      }
+    } catch (e) {
+      console.error('[booking-deadlines] deletion pass', String(e && e.message || e).slice(0, 160));
+    }
+    results.deletion = deletion;
 
     return res.status(200).json({ ok: true, ...results });
   } catch (e) {

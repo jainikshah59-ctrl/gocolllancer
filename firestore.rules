@@ -28,6 +28,25 @@ service cloud.firestore {
       return key in data ? data[key] : dflt;
     }
 
+    /* Item 11 (Cycle 19, SENTINEL): server-side format validation for payout
+     * destination fields. The client-side checks in creator-connect.js are
+     * bypassable by direct writes, so the rules are the real enforcement —
+     * malformed UPI/bank details are rejected here before they can stall a
+     * payout in the admin queue.
+     * UPI VPA: ^[\w.\-]{2,256}@[a-zA-Z]{2,64}$ ; bank account: 9-18 digits ;
+     * IFSC: ^[A-Z]{4}0[A-Z0-9]{6}$ ; holder name: longer than 2 chars. */
+    function validPayoutDest(d) {
+      return 'method' in d && d.method in ['upi', 'bank']
+        && (d.method == 'upi'
+          ? ('upi' in d && d.upi is string
+            && d.upi.matches('^[\\w.\\-]{2,256}@[a-zA-Z]{2,64}$'))
+          : ('holder' in d && d.holder is string && d.holder.size() > 2
+            && 'account' in d && d.account is string
+            && d.account.matches('^[0-9]{9,18}$')
+            && 'ifsc' in d && d.ifsc is string
+            && d.ifsc.matches('^[A-Z]{4}0[A-Z0-9]{6}$')));
+    }
+
     /* ---------------- admins ---------------- */
 
     match /admins/{uid} {
@@ -82,7 +101,18 @@ service cloud.firestore {
 
     match /creators/{id}/private/contact {
       allow get: if isOwner(id) || isAdmin();
-      allow create, update: if isOwner(id) || isAdmin();
+      allow create: if isOwner(id) || isAdmin();
+      // Item 19 (Cycle 19, SENTINEL): referredBy is first-write-wins —
+      // the signup flow creates the contact doc WITHOUT referredBy and then
+      // storeReferral() sets it via merge-update, so a pure "create-only"
+      // lock would break legitimate signups. Once set, it is immutable:
+      // the owner cannot change or delete it afterwards (referral-farming
+      // vector: re-visiting ?ref=<attacker> post-signup to steal credit).
+      // Admins can still correct it.
+      allow update: if isAdmin()
+        || (isOwner(id)
+          && (resource.data.get('referredBy', null) == null
+            || request.resource.data.get('referredBy', null) == resource.data.get('referredBy', null)));
       allow delete: if false;
     }
 
@@ -426,6 +456,11 @@ service cloud.firestore {
         && request.resource.id == 'payout_' + request.resource.data.bookingId
         && request.resource.data.amount * 100 >= payoutBookingData().creatorPrice * 95 - 50
         && request.resource.data.amount * 100 <= payoutBookingData().creatorPrice * 95 + 50
+        // Item 11 (Cycle 19, SENTINEL): when the creator writes destination
+        // fields on create, they must be well-formed (server-queued payouts
+        // carry no destination fields, so the check is conditional).
+        && (!('method' in request.resource.data)
+          || validPayoutDest(request.resource.data))
         && (request.resource.data.creatorId == request.auth.uid
           // brand may queue payout for its completed booking
           || (payoutBookingData().bizId == request.auth.uid
@@ -450,7 +485,11 @@ service cloud.firestore {
           && request.resource.data.creatorId == resource.data.creatorId
           && request.resource.data.bookingId == resource.data.bookingId
           && request.resource.data.amount == resource.data.amount
-          && request.resource.data.status == 'pending');
+          && request.resource.data.status == 'pending'
+          // Item 11 (Cycle 19, SENTINEL): the "Add UPI" destination update
+          // must carry well-formed details — rejects malformed VPA / bank
+          // fields server-side (client checks are bypassable).
+          && validPayoutDest(request.resource.data));
       allow delete: if false;
     }
 
@@ -602,14 +641,15 @@ service cloud.firestore {
         || (isAuthed() && resource.data.creatorId == request.auth.uid);
     }
 
-    /* ---------------- Be On Top campaigns ---------------- */
+    /* ---------------- adCampaigns (Be On Top REMOVED — Cycle 19 MONET #13) ----
+     * The Be On Top paid-boost feature was removed from the app entirely.
+     * No client code reads or writes this collection anymore. Rules kept
+     * admin-only so stale docs stay readable by admins but no new
+     * campaigns can be created by anyone. */
 
     match /adCampaigns/{id} {
-      allow read: if true; // discovery reads active boosts
-      allow create: if isAuthed()
-        && request.resource.data.creatorId == request.auth.uid
-        && request.resource.data.status == 'active';
-      allow update: if isAdmin() || (isAuthed() && resource.data.creatorId == request.auth.uid);
+      allow read: if isAdmin();
+      allow create, update: if isAdmin();
       allow delete: if false;
     }
 
@@ -670,12 +710,10 @@ service cloud.firestore {
     /* ---------------- admin revenue ledger ---------------- */
 
     match /adminRevenue/{id} {
+      // Be On Top REMOVED (Cycle 19 MONET #13): the creator ad_revenue
+      // carve-out is gone — only admin/server writes revenue entries now.
       allow read: if isAdmin();
-      allow create: if isAdmin()
-        // creator-created ad_revenue entries (Be On Top)
-        || (isAuthed()
-          && request.resource.data.type == 'ad_revenue'
-          && request.resource.data.creatorId == request.auth.uid);
+      allow create: if isAdmin();
       allow update, delete: if false;
     }
 

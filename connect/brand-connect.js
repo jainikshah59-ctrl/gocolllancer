@@ -288,6 +288,7 @@ function afterLogin(u) {
   loadMarketplace();
   loadSaved();
   loadWalletLedger();
+  loadRecoverable();
   loadNotifications();
 }
 
@@ -371,6 +372,9 @@ function mapCreator(doc) {
     pk: pk,
     /* Demo-shaped aliases (no underscore) — required by card/listHTML/profile */
     plat: _platform, niche: _niche, city: _city,
+    /* Item 20 (Cycle 19): languages the creator works in — the discovery
+     * language filter matches against this (string for indexOf). */
+    languages: Array.isArray(d.languages) ? d.languages.join(', ') : (d.languages || d.lang || ''),
     /* Underscored canonical fields — used by sorts, filters, cmin() */
     _hasPrices: pk.length > 0,
     _minPrice: low,
@@ -511,6 +515,18 @@ function notifyCreator(creatorId, bookingId, title, body) {
   // Admin SDK. Kept as a no-op so the existing call sites don't break.
   return Promise.resolve(null);
 }
+/* Item 15 (Cycle 19): server-owned cross-party notification. The client
+ * cannot write the other party's feed (rules), so after our own state write
+ * succeeds we ask /api/booking-action to notify via the Admin SDK.
+ * Best-effort — never blocks UI. */
+function notifyBookingParty(kind, bookingId) {
+  try {
+    if (window.FB && FB.api) {
+      FB.api('booking-action', { action: 'notify', kind: kind, bookingId: String(bookingId || '') })
+        .catch(function () {});
+    }
+  } catch (e) {}
+}
 function uiBookingDone(realId, methodLabel) {
   /* INSIGHT-1: analytics — payment succeeded (booking created) */
   try { if (typeof window.track === 'function') window.track('payment_succeeded', { method: String(methodLabel || 'unknown') }); } catch (e) {}
@@ -557,6 +573,7 @@ function wireActions() {
         DB.collection('bookings').doc(id).set(Object.assign({}, booking, { collaborationFingerprint: fp }))
           .then(function () {
             notifyCreator(booking.creatorId, id, 'New barter request', (booking.bizName || 'A brand') + ' sent a barter collaboration request.');
+            notifyBookingParty('barter_received', id);
             uiBookingDone(id, m);
           })
           .catch(function (e) {
@@ -827,7 +844,16 @@ function payWithCashfreeBooking(T) {
   var extra = { purpose: 'booking_payment', creatorId: draft0.creatorId, creatorPrice: draft0.creatorPrice };
   realCashfreePay(T.t, 'Booking \u00B7 ' + ((S.bk.f && S.bk.f.campaign) || ''), function (orderId, env) {
     if (orderId === false) return; // real payment failed/declined -> hard fail, NO demo (toast already shown)
-    if (!orderId) return; // backend unconfigured -> demo fallback already handled by A.ppay path
+    // Item 4 (Cycle 19, SHERLOCK): backend unconfigured (Cashfree keys unset)
+    // was a SILENT dead end here — "Opening secure payment…" then nothing.
+    // Say so honestly, remember it for this session, and re-render so the
+    // Pay button greys out with the same message.
+    if (!orderId) {
+      window.collancerCashfreeDown = true;
+      toast('Payments coming soon \u2014 UPI activation in progress.');
+      try { if (typeof sheet === 'function') sheet(); } catch (e) {}
+      return;
+    }
     var booking = buildBooking('cashfree', orderId, true, env || 'test');
     if (!booking) return;
     toast('Confirming payment\u2026');
@@ -949,8 +975,8 @@ function reviewBooking(bookingId, decision, note, evidence) {
     throw new Error('bad_decision');
   }).then(function () {
     if (decision === 'approve') toast('Booking completed. The creator can now request their payout.');
-    else if (decision === 'dispute') toast('Dispute opened. Our team will review this booking.');
-    else toast('Revision requested. The creator has been notified.');
+    else if (decision === 'dispute') { toast('Dispute opened. Our team will review this booking.'); notifyBookingParty('dispute_opened', bookingId); }
+    else { toast('Revision requested. The creator has been notified.'); notifyBookingParty('revision_requested', bookingId); }
     try { loadBookings(); } catch (e) {}
   }).catch(function (e) {
     var m = (e && e.message) || '';
@@ -1127,6 +1153,22 @@ function loadMarketplace() {
       try { S.posts = arr; if (S.route === 'shop') render(); } catch (e) {}
     }, function () {}));
   }));
+}
+
+/* Item 19 (Cycle 19, LEDGER): paid-but-unbooked recovery list. A Cashfree
+ * payment can succeed while the booking is never created (amount_mismatch,
+ * closed tab). The server lists this brand's recoverable orders (payment
+ * registry rows with status paid_unbooked and no bookingId); the wallet
+ * screen renders them with a one-tap "Recover to wallet". */
+function loadRecoverable() {
+  if (!uid || !window.FB || !FB.api) return;
+  FB.api('booking-action', { action: 'list_recoverable' }).then(function (r) {
+    try {
+      var orders = (r && r.orders) || [];
+      S.rec = orders.filter(function (o) { return o && o.orderId && Number(o.amount) > 0; });
+      if (S.route === 'wallet') render();
+    } catch (e) {}
+  }).catch(function () {});
 }
 
 /* ---------------- wallet ledger ---------------- */

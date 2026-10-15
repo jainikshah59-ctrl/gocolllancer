@@ -92,11 +92,6 @@ export const QA_ENTRIES = [
     tags: ['discovery', 'added to collancer', 'visible', 'marketplace visibility', 'appear'],
   },
   {
-    q: 'What is Be On Top?',
-    a: 'Be On Top is paid profile promotion for creators. Your profile gets boosted placement in business discovery for the plan duration. Plans: 1 day \u20B9249, 2 days \u20B9449, 3 days \u20B9649, 4 days \u20B9799, 5 days \u20B9999, 6 days \u20B91,199, 7 days \u20B91,399. Boosts can be category-specific.',
-    tags: ['be on top', 'boost', 'promote profile', 'advertising', 'ad plans'],
-  },
-  {
     q: 'What are the business Pro plans?',
     a: 'Collancer Pro for businesses: Monthly \u20B9999, cancel anytime. Pro gives a 5% discount on the creator price for every paid booking (the 12% platform fee is then calculated on the discounted price). A single \u20B920,000 booking saves you over \u20B91,000. Pro status is checked live and revoked automatically on expiry.',
     tags: ['business pro', 'pro plans', 'subscription', '999', 'pricing'],
@@ -241,8 +236,6 @@ export const KB_TOPICS = {
   'verification-guide': `Creator verification guide\n\n- Submit: platform, follower count, profile URL, niche, city, and identity details.\n- An admin reviews and approves or rejects with a reason.\n- You can resubmit after a rejection — check the reason and fix it.\n- Verified creators build more trust, but marketplace visibility also needs 10,000+ followers and a set price.`,
 
   'payouts-guide': `Creator payouts guide\n\n- Minimum payout: \u20B9100. One pending/approved request at a time.\n- Methods: UPI ID, or bank account number + IFSC.\n- Earnings become available after admin releases escrow on completed bookings (95% of creator price).\n- An admin reviews each payout request; you are notified of approval, rejection, or payment.`,
-
-  'be-on-top-guide': `Be On Top (creator profile promotion)\n\n- Paid boost for your discovery placement. Plans: 1 day \u20B9249, 2 days \u20B9449, 3 days \u20B9649, 4 days \u20B9799, 5 days \u20B9999, 6 days \u20B91,199, 7 days \u20B91,399.\n- A boost is active while its status is active and its end time is in the future.\n- Boosts can target specific categories, so you are promoted to the most relevant businesses.`,
 
   'troubleshooting': `Troubleshooting\n\n- Booking stuck on Pending: the creator hasn't responded yet — wait or try another creator.\n- Wallet deposit not credited: deposits are manual; ensure your UTR is 12 digits and the amount matches, then wait for admin verification.\n- Can't withdraw: check you meet the \u20B9100 minimum and have no other pending payout request.\n- Not visible in discovery: you need 10,000+ followers, a set price, verification, and no active booking or ban.\n- Login issues: use the same sign-in method you registered with (email or Google).`,
 };
