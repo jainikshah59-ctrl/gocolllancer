@@ -92,7 +92,7 @@ Remaining variances (38/42/46px) are chips, tags, close buttons — intentional 
 
 ## MANUAL-ONLY (needs Jainik)
 1. Publish `firestore.rules` + `firestore.indexes.json` in Firebase console (Vercel doesn't auto-publish).
-2. Set `CRON_SECRET` in Vercel env (from Cycle 2 — still pending).
+2. `CRON_SECRET`: ON HOLD per Jainik — do NOT set (supersedes the old "still pending" note).
 3. Instagram redirect_uri verification in Meta dashboard.
 4. Cashfree webhook setup in Cashfree dashboard.
 5. Audit client-side cross-user notification writes (B-M8) and rating writes (B-M9) before deploy — they will now be denied by rules.

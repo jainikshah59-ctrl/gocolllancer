@@ -15,8 +15,8 @@ collancerlatest). **Design was not touched** — only connectivity scripts were 
 | `connect/shell-connect.js` | Parent page: handles `?ig=` Instagram OAuth return. |
 | `connect/ai/` | The Collancer AI database + answer pipeline (276-entry brain, scope guard, keyless LLM pool). |
 | `connect/lib/` | Shared `constants.js` / `format.js` (pricing math). |
-| `api/` + `lib/` | 13 Vercel serverless functions. `instagram-callback.js` now reads `APP_URL` from env. |
-| `firestore.rules`, `firestore.indexes.json` | Copied verbatim from collancerlatest. |
+| `api/` + `lib/` | 12 Vercel serverless functions (Vercel Hobby max — budget FULL). `instagram-callback.js` reads `APP_URL` from env. |
+| `firestore.rules`, `firestore.indexes.json` | Hand-maintained for gocolllancer (765 rules lines, 25 composite indexes; NOT a verbatim copy of collancerlatest — payout-UPI validation, referredBy first-write-wins, private-contact PII tightening were added here). **Manual console publish required.** |
 | `vercel.json` | SPA rewrite + daily `booking-deadlines` cron. |
 | `package.json` | `firebase-admin`, `ws` for the API routes. |
 
@@ -49,31 +49,40 @@ collancerlatest). **Design was not touched** — only connectivity scripts were 
 2. Set env vars: `FIREBASE_SERVICE_ACCOUNT_JSON`, `INSTAGRAM_APP_ID`,
    `INSTAGRAM_APP_SECRET`, `INSTAGRAM_REDIRECT_URI=https://<new-url>/api/instagram-callback`,
    `APP_URL=https://<new-url>`, `CASHFREE_APP_ID`, `CASHFREE_SECRET_KEY`,
-   `CASHFREE_ENV=test`, `CRON_SECRET` (REQUIRED — the money cron returns 401 without it).
+   `CASHFREE_ENV=test`. **Do NOT set `CRON_SECRET`** (HOLD per Jainik): the
+   scheduled money cron authenticates via Vercel's `x-vercel-cron: 1` header;
+   the secret is only needed for manual cron invocations, which are currently
+   unwanted. Setting it enables nothing useful today.
 3. Firebase console → Authentication → Settings → Authorized domains → add `<new-url>`.
 4. Firebase console → Firestore → Rules → paste `firestore.rules` → Publish.
-   Firestore → Indexes → add the 14 composite indexes from `firestore.indexes.json`.
+   Firestore → Indexes → deploy the 25 composite indexes from
+   `firestore.indexes.json` via `firebase deploy --only firestore:indexes`
+   (Vercel never applies this file).
 5. Meta app dashboard → Instagram product → add the new redirect URI;
    keep `instagram_business_basic` + `instagram_business_manage_insights` scopes.
 
 ## Known limitations (same as collancerlatest right now)
 
-- **`businesses` is admin-only in firestore.rules** (creator-first rollout): brand
-  wallet balance and business profile reads fail client-side until the rules are
-  unlocked. Discovery, requirements, bookings, deposits and notifications work.
 - Phone OTP is paused externally (Firebase India SMS region / billing).
 - Cashfree production needs the VCIP video-KYC step (separate thread).
 - `collancer@upi` is still a placeholder for manual deposits.
 
 ## Deploy status
 
-Site is LIVE (HTTP 200 on the production URL). Cycles 2 (17 fixes) and 3+4
-(34 fixes) are committed and deployed. Deploy only on explicit approval.
+Site is LIVE at `1808f0f3` (Cycle 19 batch, deployed 2026-10-16 on Jainik's
+"jo bacha sab deploy krdo" — browser-verified: creator home renders, brand
+Discover renders). Prior: Cycle 18 (`804b9d1` → `8e46d429`) + blank-screen fix
+(`92bccc0` → `240f778f`). Deploy only on explicit approval.
+⚠️ Live Firestore rules are the ~22:20 IST console publish (659 lines); the
+765-line repo rules (payout-UPI validation, referredBy lock) are NOT yet
+published — that is the current top manual blocker.
 
 ## Standing manual steps (not done by deploys)
 
 - **Firebase console → Firestore → Rules → paste `firestore.rules` → Publish.**
   Deploys never auto-publish rules. Same for the composite indexes in
   `firestore.indexes.json`.
-- **Vercel env:** `CRON_SECRET` must be set (money cron is fail-closed).
+- **Firebase `measurementId`** for Analytics + founder dashboard.
+- **Real merchant UPI VPA** (`collancer@upi` is a placeholder).
+- **`CRON_SECRET`: ON HOLD — do NOT set** (see checklist item (f)).
 - Instagram redirect-URI verification in the Meta dashboard + `APP_URL` env value.

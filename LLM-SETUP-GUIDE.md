@@ -45,3 +45,11 @@
 - `connect/ai/llmPool.js` — 3-lane pool: Groq (3500ms) → Cloudflare → Gemini → local KB fallback
 - `api/llm.js` — server-side proxy for all 3 lanes (keys from Vercel env vars, never exposed to client). Note: `api/llm-keys.js` (the old key-serving endpoint) was **deleted** on 2026-10-13 — the proxy replaced it.
 - Priority: direct `/api/llm` call → local knowledge base fallback (all lanes fail)
+
+## Live setup facts (2026-10-16)
+
+- **Failover order:** Groq (primary) → Cloudflare Workers AI → Gemini (backup) → 276-entry local knowledge base.
+- **Model on Groq:** `openai/gpt-oss-20b` — Groq **retired** `llama-3.1-8b-instant` (2026-10-13); using the retired model ID returns a model-not-found error, not an AI answer.
+- **Auth + quota:** `POST /api/llm` requires Firebase ID-token auth (fail-closed) plus a **200/day/uid Firestore quota** — anonymous or over-quota calls are rejected server-side, so one client cannot burn another lane's key budget.
+- **Keys live ONLY in Vercel env vars** (`GROQ_API_KEY`, `CLOUDFLARE_API_KEY`, `CLOUDFLARE_ACCOUNT_ID`, `GEMINI_API_KEY`) — never committed to git; changing them needs a Vercel **Redeploy** to take effect.
+- Verified live 2026-10-13 with `provider=groq` (after the model swap).

@@ -1,9 +1,14 @@
 # Collancer Tax Compliance Roadmap — India (DRAFT, not legal advice)
 
-> **Status: RESEARCH DOCUMENT ONLY. No tax logic is implemented in the app.**
+> **Status: RESEARCH DOCUMENT. TDS TRACKING is implemented; deduction is not.**
+> Per-creator FY totals with the ₹50,000 threshold flag ship in
+> `creators/{id}.tdsTracking` (Cycle 19) — the banner's old "no tax logic"
+> claim is wrong. What is still missing: actual TDS deduction, Form 26Q inputs,
+> and Form 16A issuance — those need a **written CA opinion** first
+> (the 194J-vs-194O fork is a 100x difference). GST is deliberately OUT of the
+> money math until turnover nears ₹20L/yr (Jainik's settled position).
 > A practicing Chartered Accountant must confirm every rule below before any
-> code is written. This roadmap exists so the product team knows what to ask
-> the CA, and what the implementation surface will be.
+> deduction code is written.
 
 ---
 
@@ -67,7 +72,7 @@
 
 - **72-hour creator-response window:** Every paid booking is created with
   `acceptDeadline = createdAt + 72h`.
-- If the creator does not accept within 72h, the hourly cron
+- If the creator does not accept within 72h, the daily cron (02:00 UTC)
   (`api/booking-deadlines.js`, section 1) **auto-cancels the booking and
   refunds the brand in full** (server-truth `paidAmount`, idempotent via
   `refund_{bookingId}`).

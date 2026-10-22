@@ -3176,5 +3176,53 @@ export default [
   "priority": 3,
   "sourcePolicy": "domain-guidance",
   "lastVerified": "2026-09-23"
+ },
+ {
+  "id": "upi-charges-why",
+  "category": "payments",
+  "title": "Is there a UPI charge on my booking?",
+  "answer": "No — there is no UPI charge on Collancer bookings. UPI payments are free today: you pay only the creator price plus the 12% platform fee shown in your order summary. A 0.4% fee on larger UPI payments has been proposed by NPCI but has not taken effect; if it ever does, Collancer will absorb it rather than add it to your bill.",
+  "tags": [
+   "upi",
+   "charges",
+   "fee",
+   "payment",
+   "gateway"
+  ],
+  "audience": "brand",
+  "aliases": [
+   "upi charge",
+   "upi fee",
+   "why upi charge",
+   "payment gateway fee",
+   "upi charges"
+  ],
+  "priority": 2,
+  "sourcePolicy": "domain-guidance",
+  "lastVerified": "2026-10-22"
+ },
+ {
+  "id": "tds-applicable-explainer",
+  "category": "payments",
+  "title": "Will TDS be cut from my Collancer payouts?",
+  "answer": "TDS (tax deducted at source) means a small part of your payout is deducted as income tax and deposited with the government on your behalf. On Collancer, TDS may apply once your payouts cross ₹50,000 in a financial year \u2014 our CA is confirming the exact treatment. It is a government tax, not a Collancer fee, and it never applies to barter collaborations.",
+  "tags": [
+   "tds",
+   "tax",
+   "payout",
+   "deduction",
+   "194J"
+  ],
+  "audience": "creator",
+  "aliases": [
+   "tds",
+   "tax deducted",
+   "tds applicable",
+   "income tax",
+   "tds on payout"
+  ],
+  "priority": 2,
+  "sourcePolicy": "domain-guidance",
+  "lastVerified": "2026-10-16"
  }
 ]

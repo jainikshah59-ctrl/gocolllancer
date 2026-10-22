@@ -8,6 +8,7 @@
   'use strict';
   /* 3D black toast, white text, above bottom bar — matches app design. */
   function toast(m) {
+    if (typeof toastDedupe === 'function' && toastDedupe(m)) return;
     var t = document.getElementById('ig-toast');
     if (!t) {
       t = document.createElement('div');

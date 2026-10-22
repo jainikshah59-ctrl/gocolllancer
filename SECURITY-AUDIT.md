@@ -62,29 +62,66 @@ transaction (checks `refundProcessed !== true` before crediting).
 
 ---
 
-## Cycles 5–7 — re-verified holding, new findings → NOT YET FIXED (open at `cda9399`)
+## Cycles 16–21 — implementation batches → `fe05f44` (2026-10-15), `804b9d1` (2026-10-15), `30252ac` (2026-10-16)
 
-These were confirmed at HEAD `cda9399`. Nothing fixed yet; all await Jainik's approval.
+Adversarial findings closed by these commits (Jainik-approved), plus the status
+changes of earlier rows:
+
+| Sev | Finding | Fix |
+|---|---|---|
+| CRITICAL | Fake wallet credit via client-writable `paidAmount` on booking create (C6 SENTINEL N1) | `bookingCreateMoneySafe()` in `firestore.rules` + server-set `paidAmount` — closed both layers (`fe05f44`) |
+| CRITICAL | `api/llm.js` POST had **no auth** — open keyed-LLM quota burn + jailbreak oracle (C8 B-M6 residual) | `POST /api/llm` requires Firebase auth (`verifyUid`); client `system` prompt ignored, server-built prompt (`fe05f44`); api/llm.js:163–173 |
+| CRITICAL | `api/booking-deadlines` 401'd on Vercel's scheduled cron — accepted only Bearer/`x-cron-secret`/query | `x-vercel-cron: 1` accepted for the scheduled path; `CRON_SECRET` remains mandatory fail-closed for manual invocations (api/booking-deadlines.js:25–31) |
+| HIGH | `/api/refund-request.js` refunded FULL `paidAmount` on Active-cancel (server disagreed on fee math); had zero callers | Endpoint **deleted** (245 lines) — refunds run exclusively through cron §1b server-truth math (`fe05f44`) |
+| HIGH | Cron §1b refund pickup had no `try/catch` on first query — a missing composite index 500'd the whole daily cron | Per-query try/catch on every cron section (1a, 1b, 2, reconcile) — index miss degrades to empty snap (`30252ac`) |
+| HIGH | Booking amount mismatch on UPI payments ≥₹2,000 — `booking-create` didn't tolerate the UPI MDR the order pipeline added | Accepts `expectedTotal` OR `expectedTotal + upiMdrCharge` (`30252ac`) |
+| MEDIUM | Payout destination (UPI VPA / bank) had no server validation — malformed destinations stalled the admin queue | Rules-side validation: VPI regex, 9–18 digit account, IFSC format, holder > 2 chars (`30252ac`) |
+| MEDIUM | `referredBy` mutable post-signup — referral-farming vector (re-visit `?ref=<attacker>`) | First-write-wins in `firestore.rules:105–115` (immutable once set; admins excepted) — **live-effective only after console publish** |
+| MEDIUM | Cross-party notifications were client-written and rules-denied — invisible/silent | `api/booking-action.js` `notify` action: server-owned notification via Admin SDK (`30252ac`) |
+| LOW | XSS in review popup | Escaping fix (`8595e11`) |
+| LOW | Referral farming via duplicate credit | Fail-closed transactional caps in `lib/referral.js` (`8595e11`, `30252ac`) |
+
+**Live-effectiveness caveat (2026-10-16):** the firestore.rules deltas above
+(payout-UPI validation, referredBy lock, contact create/update tightening,
+765 lines) are repo-truth; the console publish at ~22:20 IST predates them
+(659 lines). Until Jainik publishes, production enforces the OLD rules.
+
+---
+
+## OPEN rows (2026-10-16)
 
 | Sev | Finding | Status |
 |---|---|---|
-| CRITICAL | `api/booking-deadlines` doesn't accept Vercel's `x-vercel-cron: 1` header — the scheduled cron 401s EVEN AFTER `CRON_SECRET` is set; `vercel.json` says daily `0 2 * * *` while the header says "every hour" | OPEN — cron structurally dead in production |
-| CRITICAL | Fake wallet credit — rules don't constrain `paidAmount`/`paymentStatus` at booking create; a fake `escrow_held` booking auto-refunded by the cron credits real wallet funds | OPEN |
-| HIGH | `api/llm.js` accepts a client-supplied `system` prompt (up to 4000 chars) into the Groq/Cloudflare/Gemini lanes → prompt-injection + quota burn on paid keys | OPEN — fix must move the prompt server-side, not just reject |
-| HIGH | Refund ledger split: cron writes refunds to `wallet_ledger` (no Firestore rule, read by nothing) while brand wallet UI reads `walletTransactions` → refunds invisible in wallet history | OPEN |
-| HIGH | `payWithWallet` does a client-side `tx.update(walletBalance)`, but repo rules allow only admin updates → permission-denied under repo rules (live-console comparison still manual-only) | OPEN |
-| MEDIUM | `booking-create` doesn't verify `creatorPrice` against `creators/{id}` prices (last client-controlled pricing input) | OPEN |
-| MEDIUM | Bookings create rule still allows client writes of `paidAmount`/`paymentStatus`/`escrowStatus`/`paymentReference` | OPEN |
-| MEDIUM | Paid-but-tab-closed gap: PAID at Cashfree, no booking written, nobody notified | OPEN (webhook design proposed, needs Cashfree dashboard config by Jainik) |
-| LOW | B-L10 (order-ownership check on `cashfree-verify`) | OPEN |
-| LOW | `scamAlerts` creatorName spoofable; `requirements` owner can change `bizId` on update; real Cashfree bookings mislabeled `demoPayment=true` | OPEN |
+| HIGH | DPDP deletion processor: UI promised 30-day deletion that never ran (SENTINEL, C19) | **IMPLEMENTED in `30252ac`** (cron §5, fail-closed) — execution unverified pending first real cron run; needs one `deletionRequests` request in prod to prove the path end-to-end |
+| HIGH | Payout-UPI rules + referredBy lock + contact deltas not yet live in prod | Pending **manual** `firestore.rules` console publish (Jainik); until then creator "Add UPI" is permission-denied |
+| MEDIUM | TDS gated on CA opinion | `30252ac` added **tracking only** (FY totals, ₹50k threshold flag) — 194J-vs-194O fork is a 100x difference; needs a written CA opinion before any deduction |
+| — | Creator DPDP deletion — which handler is canonical (dual path clarified) | **Canonical:** the in-app deletion sheet owned by the profile script in `index.html` (`[data-cdel]` → `[data-cdelpanel]` panel, Cycle 19 Item 8). The legacy native-`confirm()` interception in `connect/creator-connect.js` was REMOVED (Cycle 21 — it fired in capture phase and shadowed the sheet). Server-side execution runs in the booking-deadlines cron §5 against `deletionRequests` (30-day grace, fail-closed). |
+| LOW | B-L10: `cashfree-verify` order-ownership check | Still open (order-owner check fail-open when customer_id missing) |
+| LOW | `instagram-refresh.js` stale-token 400 with no retry/backoff (partial-write risk) | Open; auth + 10/min/IP rate limit present |
+
+## Cycles 5–7 — RETIRED 2026-10-16 (all 8 rows fixed in later cycles)
+
+The rows below were true at HEAD `cda9399` (2026-10-14) and are now all **fixed**
+in Cycles 17/18/19. Kept here only as history — the current open findings are
+in the table above.
+
+| Sev | Finding | How it was fixed |
+|---|---|---|
+| CRITICAL | `api/booking-deadlines` didn't accept Vercel's `x-vercel-cron: 1` header — cron 401'd even after `CRON_SECRET` was set | `api/booking-deadlines.js:29` accepts the `x-vercel-cron: 1` scheduled path; the cron runs **daily 02:00 UTC** (`vercel.json`) — it was never "every hour" |
+| CRITICAL | Fake wallet credit — rules didn't constrain `paidAmount`/`paymentStatus` at booking create | `bookingCreateMoneySafe` rules guard + server-truth amounts on booking-create |
+| HIGH | `api/llm.js` accepted a client-supplied `system` prompt (up to 4000 chars) | POST now requires Firebase auth, prompt lives server-side, per-uid daily quota |
+| HIGH | Refund ledger split: cron wrote to `wallet_ledger` while the wallet UI read `walletTransactions` | Refunds now write to server-owned `walletTransactions` |
+| HIGH | `payWithWallet` did a client-side `tx.update(walletBalance)` that repo rules deny | All wallet balance writes are server-owned |
+| MEDIUM | `booking-create` didn't verify `creatorPrice` against `creators/{id}` prices | Creator price now verified server-side against the creator doc |
+| MEDIUM | Bookings create rule allowed client writes of `paidAmount`/`paymentStatus`/`escrowStatus`/`paymentReference` | Blocked by rules — client can no longer write money fields |
+| MEDIUM | Paid-but-tab-closed gap: PAID at Cashfree, no booking written, nobody notified | Closed via `api/cashfree-webhook.js` + the booking-deadlines reconcile sweep |
 
 **Standing manual-only blockers (can never be fixed in code):**
 1. Publish `firestore.rules` + `firestore.indexes.json` in the Firebase console (Jainik).
-2. Set `CRON_SECRET` in Vercel env (Jainik) — *insufficient alone until the cron-auth code fix ships*.
+2. **`CRON_SECRET`: ON HOLD per Jainik — do NOT set.**
 3. Live Firebase console `firestore.rules` vs repo rules comparison (Jainik).
 4. Cashfree VCIP video-KYC call (original physical PAN or DigiLocker e-PAN on camera).
-5. GitHub remote `main` == `cda9399` verification.
+5. GitHub remote `main` == HEAD verification.
 
 ---
 
@@ -92,3 +129,10 @@ These were confirmed at HEAD `cda9399`. Nothing fixed yet; all await Jainik's ap
 - `5de7fb8` (2026-10-13 19:01 UTC) — Cycle 0 audit batch
 - `d25390e` (2026-10-13 21:06 UTC) — Cycle 2, 17 fixes (deployed)
 - `cda9399` (2026-10-14 02:26 UTC) — Cycles 3+4, 34 fixes
+- `fe05f44` (2026-10-15 18:20 UTC) — Cycle 17 batch (refund-request deleted, LLM quota, rebook-safe ids, brand-signup fix, refund index)
+- `8595e11` / `b35809b` (2026-10-15) — SENTINEL XSS + referral-farming guard; discovery nano fix
+- `804b9d1` (2026-10-15 18:28 UTC) — Cycle 18, 21 approved items (instagram-refresh API, payout-UPI path, Hindi phase 2, legal pages)
+- `92bccc0` (2026-10-15 18:59 UTC) — blank-screen fix (MONEY_I18N brace + setTimeout brace); pushed as `240f778f`
+- `30252ac` (2026-10-15 19:36 UTC) — Cycle 19, all 21 approved items (Jainik: all approved); deployed as `1808f0f3` (Jainik: "jo bacha sab deploy krdo")
+
+Live baseline 2026-10-16: **1808f0f3** on Vercel (browser-verified: creator home + brand Discover render). Rules live at the ~22:20 IST console publish — the 765-line repo rules (payout-UPI validation, referredBy lock) are NOT yet published.

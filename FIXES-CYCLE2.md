@@ -96,7 +96,7 @@
 ## Verification
 - `node --check` passes on all 9 modified/created JS files.
 - Deployed: commit `d25390e` pushed, Vercel READY, live site serving the fixes.
-- Standing post-deploy caveat: `CRON_SECRET` must still be set in the Vercel dashboard (pending).
+- Standing post-deploy caveat: `CRON_SECRET` is **ON HOLD per Jainik — do NOT set** (supersedes the old "pending" note).
 
 ## Files changed
 1. `api/booking-deadlines.js` — ESM import, fail-closed CRON_SECRET, biz-doc guard, idempotent refunds, reject-refund finalization

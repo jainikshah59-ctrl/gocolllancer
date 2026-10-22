@@ -29,7 +29,7 @@ function esc(t) {
     return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c];
   });
 }
-/* inr() removed — uses the single global from index.html (Item 28, Cycle 16). */
+/* inr() is defined top-level in the brand template document (Item 1, Cycle 34) — srcdoc iframes do not share the shell's scope. */
 function fmtCount(n) {
   n = Number(n || 0);
   if (n >= 10000000) return (n / 10000000).toFixed(1).replace(/\.0$/, '') + 'Cr';
@@ -48,6 +48,7 @@ function agoStr(ts) {
   } catch (e) { return ''; }
 }
 function toast(msg) {
+  if (typeof toastDedupe === 'function' && toastDedupe(msg)) return;
   try {
     if (window.toast) { window.toast(msg); return; }
   } catch (e) {}
@@ -246,8 +247,10 @@ function doBrandGoogle() {
     })
     .catch(function (err) { toast(friendlyAuthError(err)); });
 }
-/* businesses is admin-gated in the current rules (creator-first rollout);
- * attempt the doc write/read but never fail auth on it. */
+/* businesses/{uid} is owner-writable per firestore.rules (create whitelist,
+ * owner get) — not admin-gated. Attempt the doc write/read but never fail
+ * auth on it; the .catch guards below stay as defense for offline or
+ * rules-publish lag. */
 function ensureBusinessDoc(u, email, bizName, extra) {
   var ref = DB.collection('businesses').doc(u.uid);
   return ref.get().then(function (snap) {
@@ -277,8 +280,8 @@ function ensureBusinessDoc(u, email, bizName, extra) {
     return ref.set(doc).then(function () {
       /* INSIGHT-1: analytics — new brand signup completed */
       try { if (typeof window.track === 'function') window.track('signup_completed', { role: 'brand' }); } catch (e) {}
-    }).catch(function () { /* admin-gated: locked for now */ });
-  }).catch(function () { /* admin-gated read: locked for now */ });
+    }).catch(function () { /* defensive: a profile write must never fail auth */ });
+  }).catch(function () { /* defensive: a profile read must never fail auth */ });
 }
 
 function afterLogin(u) {
@@ -330,9 +333,14 @@ function isProActive() {
 function bizIsPro() { return isProActive(); }
 try { window.collancerIsPro = bizIsPro; window.collancerIsProActive = isProActive; } catch (e) {}
 function pricingFor(creatorPrice) {
-  // Canonical rule: 5% Pro discount off the CREATOR PRICE first,
+  // Canonical rule: 5% Pro discount off the CREATOR PRICE first (capped at
+  // ₹999 via the single client-side helper window.collancerProDiscount,
+  // defined in the brand template — Item 23: never duplicate the formula),
   // then 12% platform fee on the DISCOUNTED price.
-  var discount = isProActive() ? Math.round(creatorPrice * 0.05) : 0;
+  var pd = (typeof window !== 'undefined' && typeof window.collancerProDiscount === 'function')
+    ? window.collancerProDiscount
+    : function (p) { return Math.min(999, Math.round(p * 0.05)); };
+  var discount = isProActive() ? pd(creatorPrice) : 0;
   var discounted = creatorPrice - discount;
   var fee = Math.round(discounted * 0.12);
   return { creatorPrice: creatorPrice, discountedPrice: discounted, fee: fee, discount: discount, total: discounted + fee };
@@ -386,31 +394,92 @@ function mapCreator(doc) {
     portfolio: Array.isArray(d.portfolioMediaIds) ? d.portfolioMediaIds.filter(function (u) { return typeof u === 'string' && u; }).slice(0, 6) : [],
   };
 }
-function loadCreators() {
-  var col = DB.collection('creators');
-  var apply = function (snap) {
-    var arr = [];
-    snap.forEach(function (doc) {
-      var d = doc.data();
-      if (d.banned) return;
-      arr.push(mapCreator(doc));
-    });
-    // Note: no pre-sort here — listHTML() applies the user's chosen sort
-    // (default 'recommended': engagement-weighted, nano/micro-friendly).
+/* Item 14 (NEXUS Cycle): server-side discovery pagination.
+ * The brand discovery list used to load limit(200) with no ordering — at a
+ * 20k creator base 19,800 creators were invisible and the initial read was
+ * heavy. Now: the initial read is limit(20); each "Show more" click raises
+ * the limit by 20 (capped at DISC_MAX=200, the old read budget — never more).
+ * onSnapshot stays live; all client-side filters/sorts in listHTML() are
+ * untouched; no orderBy, so no new composite indexes are required. */
+var DISC_STEP = 20, DISC_MAX = 200;
+var discLimit = DISC_STEP, discUnsub = null, discLoadedOnce = false, discHasMore = false;
+
+function applyCreators(snap) {
+  var arr = [];
+  snap.forEach(function (doc) {
+    var d = doc.data();
+    if (d.banned) return;
+    arr.push(mapCreator(doc));
+  });
+  // The snapshot hit the current server limit and we are still under the
+  // read-budget cap — there may be more creators to load on "Show more".
+  discHasMore = (snap.size >= discLimit) && (discLimit < DISC_MAX);
+  discLoadedOnce = true;
+  // Note: no pre-sort here — listHTML() applies the user's chosen sort
+  // (default 'recommended': engagement-weighted, nano/micro-friendly).
+  try {
+    C.length = 0;
+    arr.forEach(function (c) { C.push(c); });
+    // keep a deep-linked creator visible even if outside the current limit
     try {
-      C.length = 0;
-      arr.forEach(function (c) { C.push(c); });
-      // keep a deep-linked creator visible even if outside the top-60
-      try {
-        var dc = window._deepCreator;
-        if (dc && !C.some(function (x) { return String(x.id) === String(dc.id); })) C.push(dc);
-      } catch (e2) {}
-      if (S.route === 'discover' || S.route === 'profile') render();
-    } catch (e) {}
-  };
+      var dc = window._deepCreator;
+      if (dc && !C.some(function (x) { return String(x.id) === String(dc.id); })) C.push(dc);
+    } catch (e2) {}
+    if (S.route === 'discover' || S.route === 'profile') render();
+    discFooter();
+  } catch (e) {}
+}
+
+function subscribeCreators() {
+  var col = DB.collection('creators');
+  // detach the previous live listener before re-subscribing at the new limit
+  if (discUnsub) {
+    try { discUnsub(); } catch (e) {}
+    var i = unsubs.indexOf(discUnsub);
+    if (i > -1) unsubs.splice(i, 1);
+  }
   // public read; fetch without follower-order so nano/micro creators are included.
   // Sorting happens client-side in listHTML() (recommended/engagement/followers/price).
-  track(col.limit(200).onSnapshot(apply, function () {}));
+  discUnsub = col.limit(discLimit).onSnapshot(applyCreators, function () {});
+  track(discUnsub);
+}
+
+/* Item 14: honest post-render footer for the discovery list.
+ * - Count line: counts the creator cards actually on screen — never claims
+ *   a platform total we have not counted (no aggregation query).
+ * - "Show more" button: listHTML() only renders its own button while more
+ *   of the *loaded* docs are hidden by client paging; this one covers the
+ *   case where the server limit itself is the ceiling. Uses the exact
+ *   existing button design language (copied from listHTML). */
+function discFooter() {
+  try {
+    if (S.route !== 'discover') return;
+    var list = document.getElementById('list');
+    if (!list) return;
+    var cards = list.querySelectorAll('[data-a="open"]');
+    var hint = list.querySelector('.hint');
+    if (hint && cards.length) {
+      hint.textContent = 'Showing ' + cards.length + ' creator' + (cards.length === 1 ? '' : 's');
+    }
+    if (discHasMore && !list.querySelector('[data-a="more"]')) {
+      var d = document.createElement('div');
+      d.innerHTML = '<div style="text-align:center;margin-top:4px"><button type="button" class="tag glass" data-a="more" style="height:46px;padding:0 28px;border-radius:23px;font-size:14.5px;font-weight:800">Show more</button></div>';
+      list.appendChild(d.firstChild);
+    }
+  } catch (e) {}
+}
+
+function loadCreators() {
+  // Minimal first-load indicator (HUNTER item 5): the old "0 creators" flash
+  // while the snapshot is in flight. Existing hint style, replaced by the
+  // real list the moment the first snapshot lands.
+  try {
+    if (!discLoadedOnce && S.route === 'discover') {
+      var list = document.getElementById('list');
+      if (list) list.innerHTML = '<div class="hint" style="margin:8px 0 0 4px;text-align:center">Loading creators…</div>';
+    }
+  } catch (e) {}
+  subscribeCreators();
   // live search filter is already in the app (#q); category filter via data-a="cat"
 }
 
@@ -429,6 +498,14 @@ function loadBookings() {
         price: Number(d.creatorPrice || 0), fee: Number(d.platformFee || 0),
         oid: doc.id, _status: d.status || 'Pending',
         revs: d.revisions || '', revCount: Number(d.revisionCount || 0),
+        /* Cycle 21, item 4b: refund state for cancelled cards — rendered by
+         * paintRefundStatus() after dashboard render. */
+        refundStatus: d.refundStatus || '', refundAmount: Number(d.refundAmount || 0),
+        /* Item 13b: the server (booking-deadlines cron) writes the ACTUAL
+         * refunded amount as refundedAmount when the refund is processed.
+         * refundAmount is only the client's estimate at cancel time — carry
+         * both so paintRefundStatus can prefer the server truth. */
+        refundedAmount: Number(d.refundedAmount || 0),
         isCustomOffer: !!d.isCustomOffer, offerStatus: d.offerStatus || '',
         offerPrice: Number(d.offerPrice || 0), reviewed: false,
       });
@@ -538,8 +615,95 @@ function uiBookingDone(realId, methodLabel) {
   } catch (e) {}
 }
 
+function tMs(k) { try { return window.tM ? window.tM(k) : k; } catch (e) { return k; } }
+
+/* Sticky order-summary strip for the booking sheet (Cycle 21 collapse).
+ * Shows the exact tot() math — creator price, Pro discount, 12% fee,
+ * UPI MDR when applicable, total — in the app's glass-card language.
+ * Skipped on step 4 (body() renders the full summary card there) and
+ * step 6 (done). Idempotent: any previous strip is removed first. */
+function injectBookingMoneyStrip() {
+  var b = null;
+  try { b = S.bk; } catch (e) {}
+  if (!b || b.step < 2 || b.step === 4 || b.step === 6) return;
+  var sc = document.getElementById('sc');
+  if (!sc) return;
+  var old = document.getElementById('bcon-mstrip');
+  if (old && old.parentNode) old.parentNode.removeChild(old);
+  var T = null;
+  try { T = tot(); } catch (e) {}
+  if (!T) return;
+  var strip = document.createElement('div');
+  strip.id = 'bcon-mstrip';
+  strip.className = 'glass card';
+  strip.style.cssText = 'position:sticky;top:0;z-index:20;padding:10px 14px;margin:0 0 12px;border-radius:18px';
+  var html;
+  if (b.type === 'barter') {
+    html = '<div style="display:flex;justify-content:space-between;align-items:center"><span style="font-size:13px;font-weight:800">' + esc(tMs('Order summary')) + '</span><span style="font-size:13px;font-weight:800">Barter \u2014 no payment</span></div>';
+  } else if (!(T.p > 0)) {
+    html = '<div style="font-size:13px;font-weight:700;color:#55616d">Pick a package to see your total.</div>';
+  } else {
+    var parts = [inr(T.p)];
+    if (T.disc > 0) parts.push('\u2212' + inr(T.disc) + ' Pro');
+    parts.push('+' + inr(T.fee) + ' fee');
+    if (window.collancerUpiMdrEnabled === true && T.upiMdr > 0) parts.push('+' + inr(T.upiMdr) + ' UPI');
+    html = '<div style="display:flex;justify-content:space-between;align-items:center"><span style="font-size:13px;font-weight:800">' + esc(tMs('Order summary')) + '</span><span style="font-size:17px;font-weight:800;letter-spacing:-.3px">' + inr(T.t) + '</span></div>' +
+      '<div style="font-size:12px;color:#55616d;margin-top:3px">' + esc(parts.join('  \u00B7  ')) + ' = ' + inr(T.t) + '</div>';
+  }
+  strip.innerHTML = html;
+  sc.insertBefore(strip, sc.firstChild);
+}
+
+/* Renders refundStatus on cancelled booking cards (Cycle 21, item 4b).
+ * loadBookings() carries refundStatus/refundAmount on each card object;
+ * the card HTML itself is built in index.html, so this post-pass appends
+ * an honest refund line matched by Order ID. Idempotent via data-bcon-rs. */
+function paintRefundStatus() {
+  var bk = [];
+  try { bk = S.bookings || []; } catch (e) { return; }
+  var rows = bk.filter(function (k) { return k && k._status === 'Cancelled' && k.refundStatus; });
+  if (!rows.length) return;
+  var cards = [];
+  try { cards = Array.prototype.slice.call(document.querySelectorAll('.body .glass.card')); } catch (e) { return; }
+  if (!cards.length) return;
+  rows.forEach(function (k) {
+    var oid = String(k.oid || '');
+    if (!oid) return;
+    for (var i = 0; i < cards.length; i++) {
+      var c = cards[i];
+      try {
+        if (c.getAttribute('data-bcon-rs')) continue;
+        if (c.textContent.indexOf(oid) < 0) continue;
+        c.setAttribute('data-bcon-rs', oid);
+        var st = String(k.refundStatus || '').toLowerCase();
+        /* Item 13b: prefer the SERVER's refundedAmount (written by the
+         * booking-deadlines cron when the refund actually processes) over the
+         * client's refundAmount estimate — the estimate could be 0 or stale,
+         * producing the "Refunded ₹0" bug. Fall back to the estimate only
+         * when the server hasn't written its figure yet (pending refunds). */
+        var doneAmt = Number(k.refundedAmount || 0) || Number(k.refundAmount || 0);
+        var label;
+        if (st === 'done' || st === 'completed' || st === 'refunded' || st === 'credited') {
+          label = 'Refunded ' + inr(doneAmt) + ' to your Collancer Wallet.';
+        } else if (st === 'failed') {
+          label = 'The refund could not be completed. Contact support@collancer.in.';
+        } else {
+          label = 'Refund of ' + inr(k.refundAmount || 0) + ' to your Collancer Wallet is pending \u2014 processed within 24 hours of cancellation.';
+        }
+        var div = document.createElement('div');
+        div.innerHTML = '<div class="hint" style="margin:10px 0 0;font-weight:700;color:#0e7490">' + esc(label) + '</div>';
+        c.appendChild(div);
+      } catch (e2) {}
+    }
+  });
+}
+
 /* ---------------- action overrides ---------------- */
 function wireActions() {
+  /* Item 26 (Cycle 21): pre-booking "Ask a question" — the profile view's
+   * data-a="askq" button; the thread implementation is in the Item 26 section
+   * at the end of this file. */
+  A.askq = askqOpen;
   /* String-safe id handling: real creator ids are Firestore strings, but the
    * app coerces data-v with + (numeric demo ids). Preserve both. */
   A.open = function (t) {
@@ -553,7 +717,89 @@ function wireActions() {
   A.book = function (t) {
     var v = t.dataset.v;
     openBook((v != null && v !== '' && isNaN(+v)) ? v : +v);
+    /* Booking-field collapse (Cycle 21): auto-fill the contact number from
+     * the business profile — one required Details field the brand never
+     * types twice. The offline draft restore (Item 21b) runs inside
+     * openBook(); only fill when the field is still empty. */
+    try {
+      if (S.bk && S.bk.f && !String(S.bk.f.contact || '').trim() && bizDoc && bizDoc.phone) {
+        S.bk.f.contact = String(bizDoc.phone).slice(0, 40);
+        sheet();
+      }
+    } catch (e) {}
   };
+
+  /* Booking-field collapse (Cycle 21): merge Review (4) into Payment (5)
+   * for paid package bookings — 6 steps become 5. The full order summary
+   * rides on the sticky money strip (sheet wrapper below), so skipping the
+   * review screen hides no rupee. Barter and custom-offer flows keep step 4
+   * — their confirm/offer screens live there. */
+  var _bconNext = A.next;
+  A.next = function () {
+    var b = null;
+    try { b = S.bk; } catch (e) {}
+    if (b && b.step === 3 && b.type === 'paid' && b.pk !== -1) {
+      if (!validate()) {
+        sheet();
+        var e = $('#ov [style*="e11d48"]');
+        if (e && e.scrollIntoView) e.scrollIntoView({ block: 'center' });
+        return;
+      }
+      b.skippedReview = true;
+      b.step = 5;
+      sheet();
+      var sc = $('#sc');
+      if (sc) sc.scrollTop = 0;
+      return;
+    }
+    _bconNext();
+  };
+  var _bconBack = A.back;
+  A.back = function () {
+    var b = null;
+    try { b = S.bk; } catch (e) {}
+    /* Collapse companion: Back from Payment (5) after a skipped Review
+     * returns to Details (3), not the skipped screen. */
+    if (b && b.step === 5 && b.skippedReview) {
+      b.step = 3; b.skippedReview = false;
+      sheet();
+      var sc = $('#sc');
+      if (sc) sc.scrollTop = 0;
+      return;
+    }
+    _bconBack();
+  };
+
+  /* Sticky money summary (Cycle 21): the order summary stays visible on
+   * every money step of the booking sheet (package pick, details, payment),
+   * using the same canonical tot() math the review screen uses. */
+  try {
+    if (typeof window.sheet === 'function' && !window.sheet._bconWrapped) {
+      var _bconSheet = window.sheet;
+      var _bconSheetWrapped = function () {
+        _bconSheet();
+        try { injectBookingMoneyStrip(); } catch (e) {}
+      };
+      _bconSheetWrapped._bconWrapped = true;
+      window.sheet = _bconSheetWrapped;
+    }
+  } catch (e) {}
+
+  /* Cancelled-card refund line (Cycle 21, item 4b): the dashboard card HTML
+   * is built in index.html and never renders refundStatus — paint it after
+   * every dashboard render. paintRefundStatus() is a no-op elsewhere. */
+  try {
+    if (typeof window.render === 'function' && !window.render._bconWrapped) {
+      var _bconRender = window.render;
+      var _bconRenderWrapped = function () {
+        var r = _bconRender.apply(this, arguments);
+        try { if (S.route === 'dashboard') paintRefundStatus(); } catch (e) {}
+        return r;
+      };
+      _bconRenderWrapped._bconWrapped = true;
+      window.render = _bconRenderWrapped;
+    }
+  } catch (e) {}
 
   /* Booking payment: wallet -> Firestore transaction; cashfree -> real order */
   A.pay = function () {
@@ -612,6 +858,18 @@ function wireActions() {
     }, { purpose: purpose });
   };
 
+  /* payOffer entry points (Cycle 21): pass the tapped element so the
+   * in-flight guard can disable it for the flight of the request. */
+  A.payoffer = function (t) {
+    var k = null;
+    try { k = S.bookings.filter(function (x) { return String(x.oid) === t.dataset.v; })[0]; } catch (e) {}
+    if (!k) return;
+    if (window.collancerPayOffer) window.collancerPayOffer(k.oid, k.offerPrice, t);
+  };
+  A.chpay = function (t) {
+    try { if (S.chat && window.collancerPayOffer) window.collancerPayOffer(S.chat.oid, +t.dataset.v, t); } catch (e) {}
+  };
+
   /* Paid-but-unsaved retry (one tap): re-call booking-create with the same
    * orderId. The server order registry consumes the existing row instead of
    * 409, so this never double-charges. */
@@ -662,7 +920,7 @@ function wireActions() {
     realCashfreePay(PRO_SUBSCRIPTION_PRICE, 'pro_subscription', function (orderId, env) {
       release();
       if (orderId === false) return; // real payment failed/declined -> hard fail (toast already shown)
-      if (!orderId) { toast('Payment not completed.'); return; } // unconfigured / cancelled
+      if (!orderId) { toast('Payments coming soon \u2014 UPI activation in progress.'); return; } // unconfigured / cancelled — Item 11: honest copy, never a fake checkout
       toast('Confirming subscription…');
       // Server-side activation (cashfree-webhook): watch the business doc —
       // loadBusiness's onSnapshot refreshes bizDoc — until isProActive()
@@ -714,17 +972,73 @@ function wireActions() {
       e.stopPropagation(); e.preventDefault(); brandAiSend();
     }
   }, true);
+
+  /* Item 14 (NEXUS Cycle): server-side discovery pagination. listHTML()
+   * renders a data-a="more" button but the app's action map has no handler
+   * for it — this capture listener raises the Firestore read limit by 20
+   * (cap DISC_MAX=200) and re-subscribes onSnapshot, keeping the live feed
+   * working. S.page is bumped too so the next client page reveals at once. */
+  document.addEventListener('click', function (e) {
+    var t = e.target;
+    var b = (t && t.closest) ? t.closest('[data-a="more"]') : null;
+    if (!b || S.route !== 'discover') return;
+    if (discLimit >= DISC_MAX) return;
+    e.stopPropagation(); e.preventDefault();
+    discLimit = Math.min(DISC_MAX, discLimit + DISC_STEP);
+    S.page = (S.page || 1) + 1;
+    try { subscribeCreators(); } catch (err) {}
+  }, true);
   document.addEventListener('keydown', function (e) {
     if (e.key === 'Enter' && e.target && e.target.closest && e.target.closest('#aiIn')) {
       e.stopPropagation(); e.preventDefault(); brandAiSend();
     }
   }, true);
+
+  /* Brand bell (Cycle 21, item 4c): honest empty/error states. The notif
+   * bridge resolves [] both when there are genuinely no notifications AND
+   * when the fetch fails — the stock copy said "No notifications yet" in
+   * both cases. The bridge now records fetch health on
+   * window.collancerNotifBridgeFailed; a failed/unavailable bridge shows
+   * "Couldn't load notifications" instead of the misleading empty state. */
+  A.bell = function () {
+    mpShell('Notifications', 'Your latest updates from Collancer.', '<div class="hint" style="text-align:center;padding:20px 0">Loading…</div>');
+    var showList = function (list) {
+      var html = list.length ? list.map(function (n) {
+        return '<div class="glass card" style="padding:12px 16px;margin-bottom:10px">' +
+          '<div style="font-size:14.5px;font-weight:800">' + esc(n.title) + '</div>' +
+          (n.body ? '<div style="font-size:13.5px;color:#55616d;margin-top:4px;line-height:1.45">' + esc(n.body) + '</div>' : '') +
+          '</div>';
+      }).join('') : '<div class="hint" style="text-align:center;padding:20px 0">No notifications yet.<br>Booking updates will appear here.</div>';
+      var sc = $('#mp .sc');
+      if (sc) sc.innerHTML = html;
+    };
+    var showError = function () {
+      var sc = $('#mp .sc');
+      if (sc) sc.innerHTML = '<div class="hint" style="text-align:center;padding:20px 0">Couldn\'t load notifications.<br>Check your connection and try again.</div>';
+    };
+    try {
+      if (typeof window.collancerGetBizNotifHistory === 'function') {
+        window.collancerGetBizNotifHistory().then(function (list) {
+          if (window.collancerNotifBridgeFailed) showError();
+          else showList(list || []);
+        }, showError);
+      } else showError();
+    } catch (e) { showError(); }
+  };
 }
 
+/* Item 7 (Cycle 19): client-side double-tap guard. A fresh fingerprint is
+ * computed per tap, which defeats the server's idempotency key — so the
+ * fix must live client-side: while one wallet payment is in flight, any
+ * further tap is rejected immediately with a toast. */
+var walletPayInFlight = false;
+
 function payWithWallet(T) {
-  if (S.wallet < T.t) { toast('Insufficient wallet balance. Please add money.'); return; }
+  if (walletPayInFlight) { toast('Payment is already being processed. Please wait.'); return; }
+  if (S.wallet < T.t) { toast(window.tM ? window.tM('Insufficient balance') : 'Insufficient wallet balance. Please add money.'); return; }
   var booking = buildBooking('wallet', null, false, null);
   if (!booking) { toast('Could not create booking.'); return; }
+  walletPayInFlight = true;
   toast('Processing wallet payment\u2026');
   sha256hex(JSON.stringify(fingerprintParts())).then(function (fp) {
     /* Server-side wallet booking: /api/book-with-wallet debits the wallet,
@@ -745,10 +1059,10 @@ function payWithWallet(T) {
   }).catch(function (err) {
     var m = (err && err.message) || '';
     if (/duplicate_booking|DUPLICATE/i.test(m)) toast('You already have an active request like this.');
-    else if (/insufficient_balance|INSUFFICIENT/i.test(m)) toast('Insufficient wallet balance. Please add money.');
+    else if (/insufficient_balance|INSUFFICIENT/i.test(m)) toast(window.tM ? window.tM('Insufficient balance') : 'Insufficient wallet balance. Please add money.');
     else if (/permission|denied/i.test(m)) toast('Wallet payments need brand access enabled.');
     else toast(window.tM ? window.tM('Payment failed') : 'Payment failed. Please try again.');
-  });
+  }).finally(function () { walletPayInFlight = false; });
 }
 
 function loadCashfreeSdk() {
@@ -1001,8 +1315,23 @@ try { window.collancerReviewBooking = reviewBooking; } catch (e) {}
  * Barter/legacy bookings (no numeric paidAmount) cancel without refund fields.
  * The refund cron executes the actual wallet credit server-side and never
  * trusts these client-set fields — it uses server-truth paidAmount/platformFee.
- * For Active cancels it also queues the 10% creator kill-fee from the
- * retained fee portion (Cycle 13+14+15). */
+ * For Active cancels it records statusBeforeCancel so the refund cron can
+ * queue the 10% creator kill-fee (10% of the paid amount, capped at the
+ * retained platform fee, queued by the server for admin release) — the
+ * client never writes payoutRequests itself. */
+/* Item 24: MDR component of the brand-cancel refund estimate. Mirrors
+ * lib/pricing.js refundableBookingTotal (upiMdr capped at ₹300, counted
+ * only when real money moved) — and only when the UPI_MDR_ENABLED
+ * kill-switch is ON (window.collancerUpiMdrEnabled, mirrored from the
+ * client template). When OFF (default), this returns 0 and the estimate
+ * is exactly as before. */
+function cancelMdrEstimate(d) {
+  try {
+    if (window.collancerUpiMdrEnabled === true && d && Number(d.paidAmount) > 0)
+      return Math.min(Math.max(Number(d.upiMdr || 0), 0), 300);
+  } catch (e) {}
+  return 0;
+}
 function cancelRefundFields(d) {
   // Mirror firestore.rules exactly: the refund branch requires paidAmount to
   // be a NUMBER on the existing doc (brandCancelRefundOk). A legacy string
@@ -1010,8 +1339,9 @@ function cancelRefundFields(d) {
   if (typeof d.paidAmount !== 'number' || !(d.paidAmount > 0) || d.barter === true) return null;
   var paid = d.paidAmount;
   var fee = (typeof d.platformFee === 'number' ? d.platformFee : 0);
-  // Pending -> FULL refund; Active -> refund minus the platform fee.
-  var refund = d.status === 'Pending' ? paid : paid - fee;
+  var mdr = cancelMdrEstimate(d); // Item 24: the brand paid paidAmount+upiMdr; refund both.
+  // Pending -> FULL refund (paid + MDR); Active -> refund minus the platform fee.
+  var refund = d.status === 'Pending' ? paid + mdr : paid + mdr - fee;
   if (!(isFinite(refund) && refund >= 0)) return null;
   return {
     refundRequested: true,
@@ -1101,11 +1431,15 @@ function cancelBookingDialog(bookingId) {
     }
     var rf = cancelRefundFields(d);
     if (rf) {
-      var fee = Math.max(0, Number(d.paidAmount || 0) - rf.refundAmount);
+      var mdrEst = cancelMdrEstimate(d); // Item 24: show the MDR component when the kill-switch is ON.
+      var fee = Math.max(0, Number(d.paidAmount || 0) + mdrEst - rf.refundAmount);
+      var mdrBit = mdrEst > 0 ? ', includes ' + inr(mdrEst) + ' UPI charges' : '';
+      /* Cycle 21, item 4a: disclose the wallet-only destination and the
+       * "within 24 hours" wait next to the exact ₹ math. */
       ask('Cancel this booking?',
         d.status === 'Pending'
-          ? 'You will be refunded ' + inr(rf.refundAmount) + ' (full amount).'
-          : 'You will be refunded ' + inr(rf.refundAmount) + ' (' + inr(fee) + ' platform fee retained).');
+          ? 'You will be refunded ' + inr(rf.refundAmount) + ' (full amount' + mdrBit + ') to your Collancer Wallet within 24 hours.'
+          : 'You will be refunded ' + inr(rf.refundAmount) + ' (' + inr(fee) + ' platform fee retained' + mdrBit + ') to your Collancer Wallet within 24 hours.');
     } else {
       ask('Cancel this booking?', 'No payment to refund (barter or unpaid booking).');
     }
@@ -1345,7 +1679,7 @@ function sendCustomOffer(draft) {
       creatorCity: String(draft.creatorCity || '').slice(0, 80),
       bizId: uid, bizName: bizName,
       bizPfp: (bizDoc && bizDoc.pfp) || null,
-      type: 'paid', packageKey: null,
+      type: 'barter', packageKey: null,
       campaignName: String(draft.campaignName || '').slice(0, 160),
       productName: String(draft.productName || '').slice(0, 160),
       brief: String(draft.brief || '').slice(0, 4000),
@@ -1397,9 +1731,22 @@ try { window.collancerSendCustomOffer = sendCustomOffer; } catch (e) {}
 /* Item 13 — pay for an accepted custom offer: creates a fresh paid booking
  * through the server-side wallet lane at the agreed price, then retires the
  * original offer booking (rule-safe: moneyless Pending/Active brand cancel). */
-function payOffer(oid, price) {
+/* payOffer in-flight guard (Cycle 21): a double-tap on a custom-offer Pay
+ * used to fire two book-with-wallet calls with the SAME fingerprint — the
+ * server deduped the second, but the catch showed a false "Payment failed"
+ * AFTER a successful payment. The busy flag + button disable fix the lie:
+ * the second tap is told to wait instead of failing. */
+var payOfferBusy = {};
+function payOffer(oid, price, btnEl) {
   oid = String(oid || ''); price = Math.floor(Number(price) || 0);
   if (!oid || !(price >= 100) || !uid) { toast('Invalid offer.'); return; }
+  if (payOfferBusy[oid]) { toast('Payment is already being processed. Please wait.'); return; }
+  payOfferBusy[oid] = true;
+  var release = function () {
+    try { delete payOfferBusy[oid]; } catch (e) {}
+    if (btnEl && 'disabled' in btnEl) { try { btnEl.disabled = false; } catch (e2) {} }
+  };
+  if (btnEl && 'disabled' in btnEl) { try { btnEl.disabled = true; } catch (e) {} }
   toast('Preparing payment\u2026');
   DB.collection('bookings').doc(oid).get().then(function (snap) {
     if (!snap.exists) throw new Error('not_found');
@@ -1455,10 +1802,10 @@ function payOffer(oid, price) {
     loadBookings();
   }).catch(function (e) {
     var m = (e && e.message) || '';
-    if (/insufficient_balance|INSUFFICIENT/i.test(m)) toast('Insufficient wallet balance. Please add money.');
+    if (/insufficient_balance|INSUFFICIENT/i.test(m)) toast(window.tM ? window.tM('Insufficient balance') : 'Insufficient wallet balance. Please add money.');
     else if (m === 'not_yours') toast('This booking does not belong to your account.');
     else toast(window.tM ? window.tM('Payment failed') : 'Payment failed. Please try again.');
-  });
+  }).then(function () { release(); }, function () { release(); });
 }
 try { window.collancerPayOffer = payOffer; } catch (e) {}
 
@@ -1579,12 +1926,18 @@ function disputeFraud() {
 try { window.collancerDisputeFraud = disputeFraud; } catch (e) {}
 
 /* ---------------- notification history (Item 9, Cycle 18) ---------------- */
-/* Bell button in the brand header: fetch last 20 bizNotifs for history view. */
+/* Bell button in the brand header: fetch last 20 bizNotifs for history view.
+ * Cycle 21: records fetch health on window.collancerNotifBridgeFailed so
+ * the bell can tell "no notifications" apart from "couldn't load". */
 function getBizNotifHistory() {
-  if (!DB || !uid) return Promise.resolve([]);
+  if (!DB || !uid) {
+    try { window.collancerNotifBridgeFailed = true; } catch (e) {}
+    return Promise.resolve([]);
+  }
   return DB.collection('bizNotifs').where('bizId', '==', uid)
     .orderBy('createdAt', 'desc').limit(20).get()
     .then(function (snap) {
+      try { window.collancerNotifBridgeFailed = false; } catch (e) {}
       var arr = [];
       snap.forEach(function (doc) {
         var d = doc.data() || {};
@@ -1592,7 +1945,10 @@ function getBizNotifHistory() {
       });
       return arr;
     })
-    .catch(function () { return []; });
+    .catch(function () {
+      try { window.collancerNotifBridgeFailed = true; } catch (e) {}
+      return [];
+    });
 }
 try { window.collancerGetBizNotifHistory = getBizNotifHistory; } catch (e) {}
 
@@ -1605,5 +1961,206 @@ function brandLogout() {
   }).catch(function () {});
 }
 try { window.collancerBrandLogout = brandLogout; } catch (e) {}
+
+/* ================= Item 26 (Cycle 21): pre-booking "Ask a question" (brand) ===
+ * WhatsApp-lightweight Q&A thread between a brand and a creator, opened from
+ * the "Ask a question" button on the creator's public profile view
+ * (data-a="askq", registered in wireActions above). Threads live in the
+ * `prebooking_questions` collection — one doc per brand+creator while open:
+ * { creatorId, brandId, brandName, creatorHandle,
+ *   messages: [{from:'brand'|'creator', text, at}], status:'open'|'closed',
+ *   createdAt, updatedAt }.
+ * Explicitly separate from the booking state machine and the in-booking chat.
+ * Abuse guard: a brand may hold at most AQ_MAX_OPEN open threads — the count
+ * is checked client-side before a new thread doc is created (rules pin
+ * brandId to the caller, so a brand can only ever inflate its own count). */
+
+var AQ_MAX_OPEN = 10;   /* max open question threads per brand */
+var AQ_MAX_MSGS = 100;  /* thread length cap — oldest messages are trimmed */
+var aqThreadId = null, aqCreator = null, aqUnsub = null, aqBusy = false;
+
+function aqBrandName() {
+  return (bizDoc && bizDoc.bizName) || S.name || 'Business';
+}
+
+function aqIc(p, style) {
+  try { if (window.ic) return window.ic(p, 'class="ico" style="' + style + '"'); } catch (e) {}
+  return '';
+}
+
+/* Message bubbles mirror the brand in-booking chat (chatMsgHTML, index.html):
+ * own messages = black 3D bubble, creator messages = glass bubble. */
+function aqMsgHTML(m) {
+  var mine = m.from === 'brand', t = String(m.text || '');
+  if (mine) return '<div class="msg"><small>You</small>' + esc(t) + '</div>';
+  return '<div class="glass" style="align-self:flex-start;max-width:88%;padding:10px 14px;border-radius:20px;font-size:14.5px;line-height:1.4;white-space:pre-wrap">' + esc(t) + '</div>';
+}
+
+function aqPaint(snap) {
+  var box = document.getElementById('aq-msgs');
+  if (!box) return;
+  var d = (snap && snap.exists) ? (snap.data() || {}) : null;
+  var arr = d && Array.isArray(d.messages) ? d.messages.slice() : [];
+  arr.sort(function (a, b) {
+    var ta = a.at && a.at.toMillis ? a.at.toMillis() : 0;
+    var tb = b.at && b.at.toMillis ? b.at.toMillis() : 0;
+    return ta - tb;
+  });
+  box.innerHTML = arr.length ? arr.map(aqMsgHTML).join('')
+    : '<div class="hint" style="text-align:center">No questions yet. Ask about pricing, timelines or deliverables — no booking needed.</div>';
+  box.scrollTop = box.scrollHeight;
+  var closed = !!(d && d.status === 'closed');
+  var st = document.getElementById('aq-status');
+  if (st) st.textContent = closed ? 'Thread closed' : 'Pre-booking questions';
+  var inp = document.getElementById('aq-in');
+  if (inp) inp.disabled = closed;
+  var sendb = document.getElementById('aq-send');
+  if (sendb) sendb.style.opacity = closed ? '.45' : '1';
+  var cb = document.getElementById('aq-close');
+  if (cb) cb.style.display = closed ? 'none' : '';
+}
+
+function aqClose() {
+  var o = document.getElementById('aq');
+  if (o) o.className = 'ov';
+  if (aqUnsub) { try { aqUnsub(); } catch (e) {} aqUnsub = null; }
+  aqThreadId = null; aqCreator = null; aqBusy = false;
+}
+
+/* Overlay shell mirrors the brand in-booking chat (.ov > .dim + .w > .glass.sh):
+ * grab handle, header, scrollable message column, input row with the 3D black
+ * round send button, and a close-thread action. */
+function aqShowShell() {
+  var o = document.getElementById('aq');
+  if (!o) {
+    o = document.createElement('div');
+    o.id = 'aq';
+    o.className = 'ov';
+    o.innerHTML =
+      '<div class="dim" id="aq-dim"></div><div class="w"><div class="glass sh"><div class="grab"></div>' +
+      '<div style="display:flex;align-items:center;gap:10px;padding:0 20px">' +
+      '<div style="flex:1;min-width:0"><div style="font-size:18px;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" id="aq-title">Ask a question</div>' +
+      '<div class="sub" style="margin:0;font-size:12.5px" id="aq-status">Pre-booking questions</div></div>' +
+      '<div class="glass circ" id="aq-x" style="width:38px;height:38px;flex:none" role="button" aria-label="Close">' + aqIc('x', 'width:18px;height:18px') + '</div></div>' +
+      '<div class="sc" id="aq-msgs" style="display:flex;flex-direction:column;gap:8px;min-height:180px;max-height:52vh"></div>' +
+      '<div style="padding:12px 20px 8px;display:flex;gap:8px;align-items:center"><div class="f ft" style="flex:1"><input id="aq-in" placeholder="Ask about pricing, timelines..." maxlength="2000" autocomplete="off"></div>' +
+      '<button type="button" class="black" id="aq-send" style="width:52px;height:52px;border-radius:50%;flex:none;padding:0" aria-label="Send">' + aqIc('send', 'stroke:#fff;width:20px;height:20px') + '</button></div>' +
+      '<div style="padding:0 20px 18px"><button type="button" class="tag glass" id="aq-close" style="width:100%;height:44px;border-radius:22px;justify-content:center;font-size:14px;font-weight:700;border:0">Close thread</button></div>' +
+      '</div></div>';
+    document.body.appendChild(o);
+    document.getElementById('aq-dim').addEventListener('click', aqClose);
+    document.getElementById('aq-x').addEventListener('click', aqClose);
+    document.getElementById('aq-send').addEventListener('click', aqSend);
+    document.getElementById('aq-in').addEventListener('keydown', function (e) {
+      if (e.key === 'Enter') { e.preventDefault(); aqSend(); }
+    });
+    document.getElementById('aq-close').addEventListener('click', aqCloseThread);
+  }
+  var ttl = document.getElementById('aq-title');
+  if (ttl && aqCreator) ttl.textContent = 'Ask ' + aqCreator.name;
+  o.className = 'ov on';
+  var box = document.getElementById('aq-msgs');
+  if (box) box.innerHTML = '<div class="hint" style="text-align:center">Loading...</div>';
+  setTimeout(function () { try { document.getElementById('aq-in').focus(); } catch (e) {} }, 250);
+}
+
+function aqSubscribe(threadId) {
+  aqThreadId = threadId || null;
+  if (aqUnsub) { try { aqUnsub(); } catch (e) {} aqUnsub = null; }
+  if (aqThreadId) {
+    try { aqUnsub = DB.collection('prebooking_questions').doc(aqThreadId).onSnapshot(aqPaint, function () {}); }
+    catch (e) { aqPaint(null); }
+  } else {
+    aqPaint(null);
+  }
+}
+
+/* Entry: the profile view's "Ask a question" button (data-a="askq"). Resumes
+ * the open thread for this brand+creator pair when one exists. */
+function askqOpen(t) {
+  if (!uid) { toast('Please log in as a brand to ask questions.'); return; }
+  var v = t && t.dataset ? t.dataset.v : null;
+  var cid = (v != null && v !== '' && isNaN(+v)) ? v : +v; /* string-safe, like A.open */
+  var c = null;
+  try { c = cr(cid); } catch (e) {}
+  if (!c) { try { c = cr(S.cid); } catch (e2) {} }
+  if (!c) { toast('Creator not found.'); return; }
+  aqClose();
+  aqCreator = { id: String(c.id), name: c.name || 'Creator', handle: c.h || '' };
+  aqShowShell();
+  /* Single-field query (no composite index needed); the open-thread match is
+   * filtered client-side. */
+  DB.collection('prebooking_questions').where('brandId', '==', uid).get().then(function (snap) {
+    var found = null;
+    snap.forEach(function (doc) {
+      var d = doc.data() || {};
+      if (!found && String(d.creatorId) === aqCreator.id && d.status === 'open') found = doc.id;
+    });
+    aqSubscribe(found);
+  }).catch(function () { aqSubscribe(null); });
+}
+
+function aqSend() {
+  if (aqBusy || !uid || !aqCreator) return;
+  var inp = document.getElementById('aq-in');
+  if (!inp || inp.disabled) return;
+  var text = inp.value.trim().slice(0, 2000);
+  if (!text) return;
+  inp.value = '';
+  aqBusy = true;
+  var done = function (err) {
+    aqBusy = false;
+    if (err) toast(err === 'aq_limit'
+      ? 'You have 10 open question threads. Close one to ask more.'
+      : 'Question could not be sent.');
+  };
+  if (aqThreadId) aqAppend(aqThreadId, 'brand', text).then(function () { done(); }, function (e) { done(e && e.message); });
+  else aqCreate(text).then(function () { done(); }, function (e) { done(e && e.message); });
+}
+
+/* Abuse guard: at most AQ_MAX_OPEN open threads per brand — the count check
+ * in the create flow required by Item 26. */
+function aqCreate(text) {
+  return DB.collection('prebooking_questions').where('brandId', '==', uid).get().then(function (snap) {
+    var open = 0;
+    snap.forEach(function (doc) { if ((doc.data() || {}).status === 'open') open++; });
+    if (open >= AQ_MAX_OPEN) return Promise.reject(new Error('aq_limit'));
+    return DB.collection('prebooking_questions').add({
+      creatorId: aqCreator.id,
+      brandId: uid,
+      brandName: String(aqBrandName()).slice(0, 120),
+      creatorHandle: String(aqCreator.handle || '').slice(0, 60),
+      messages: [{ from: 'brand', text: text, at: FB.serverStamp() }],
+      status: 'open',
+      createdAt: FB.serverStamp(),
+      updatedAt: FB.serverStamp()
+    });
+  }).then(function (ref) { aqSubscribe(ref.id); });
+}
+
+/* Append-only message write via transaction; trims the array to AQ_MAX_MSGS. */
+function aqAppend(threadId, from, text) {
+  var ref = DB.collection('prebooking_questions').doc(String(threadId));
+  return DB.runTransaction(function (tx) {
+    return tx.get(ref).then(function (snap) {
+      if (!snap.exists) throw new Error('aq_gone');
+      var d = snap.data() || {};
+      if (d.status === 'closed') throw new Error('aq_closed');
+      if (String(d.brandId) !== String(uid) && String(d.creatorId) !== String(uid)) throw new Error('aq_denied');
+      var msgs = Array.isArray(d.messages) ? d.messages.slice() : [];
+      msgs.push({ from: from, text: String(text).slice(0, 2000), at: FB.serverStamp() });
+      if (msgs.length > AQ_MAX_MSGS) msgs = msgs.slice(-AQ_MAX_MSGS);
+      tx.update(ref, { messages: msgs, updatedAt: FB.serverStamp() });
+    });
+  });
+}
+
+function aqCloseThread() {
+  if (!aqThreadId) { aqClose(); return; }
+  DB.collection('prebooking_questions').doc(aqThreadId)
+    .update({ status: 'closed', updatedAt: FB.serverStamp() })
+    .then(function () { toast('Thread closed.'); })
+    .catch(function () { toast('Could not close the thread.'); });
+}
 
 })();

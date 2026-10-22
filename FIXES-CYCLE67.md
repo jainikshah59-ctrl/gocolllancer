@@ -42,10 +42,10 @@ Base: cda9399. Nothing committed/pushed/deployed — local only.
 ## Docs
 
 - `CHANGELOG.md` (new), `PRE-DEPLOY-CHECKLIST.md` (new, 7 standing rules), `SECURITY-AUDIT.md` (new, severity + file:line, no exploit recipes)
-- Refreshed: `FIXES-CYCLE2.md` status, `DEPLOY_NOTES.md` (CRON_SECRET REQUIRED, Pollinations removed), `LLM-SETUP-GUIDE.md` (llm-keys.js refs removed), `api/llm.js` + `llmPool.js` model headers, `instagram-callback.js` comments
+- Refreshed: `FIXES-CYCLE2.md` status, `DEPLOY_NOTES.md` (CRON_SECRET ON HOLD, Pollinations removed), `LLM-SETUP-GUIDE.md` (llm-keys.js refs removed), `api/llm.js` + `llmPool.js` model headers, `instagram-callback.js` comments
 
 ## Env vars needed (Jainik, Vercel dashboard)
-- `CRON_SECRET` — REQUIRED (cron 401s without it; note: now works with `x-vercel-cron: 1` scheduled path)
+- `CRON_SECRET` — ON HOLD per Jainik, do NOT set (scheduled path works via `x-vercel-cron: 1`; the secret only gates manual invocations)
 - `CASHFREE_WEBHOOK_SECRET` — from Cashfree dashboard → Webhooks
 - `APP_URL` — optional (defaults to gocolllancer.vercel.app)
 

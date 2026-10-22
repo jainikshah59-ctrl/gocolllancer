@@ -6,7 +6,343 @@ verification first).
 
 ---
 
-## Cycle 16 backend batch (FORGE, 2026-10-15, uncommitted) — Jainik-approved items
+---
+
+## 2026-10-16 — NEXUS 24/7 approved-item batch (36 of 37 approved; #30 rejected)
+
+> Jainik approved 36 of 37 audit-report items 2026-10-16 ~07:15 IST ("all
+> approved excluding only no. 30 and for 33 do what collabstr does").
+> Implemented + independently verified against HEAD `30252ac` plus the working
+> tree. NOTHING committed, pushed, or deployed — awaiting Jainik's explicit
+> deploy approval per standing rule. Entry keying `(inv. NN)` = report
+> inventory number. Drafted Cycle 51; adversarially re-read Cycle 53 (one stale
+> entry corrected below).
+
+**Item 1 (inv. 1) — inr() global restore:** 3 top-level defs; all call sites
+resolve in-scope — index.html:1272 (creator), :2452 (brand), :1965 (bk-IIFE
+local). Canonical, zero drift.
+
+**Item 2 (inv. 2) — referral ?ref=→sessionStorage bridge:** `referredBy` now
+stored at signup — index.html shell capture → connect/creator-connect.js
+getReferralCode (:667, write at :686). First-write-wins locked in
+firestore.rules:105–115 (immutable once set; admin can correct).
+
+**Item 3 (inv. 3) — bookingCreateMoneySafe circularity fix:** money fields
+absent-or-zero enforced at the rules layer — firestore.rules:251–274
+(paidAmount/paymentStatus/escrowStatus/paymentReference/refundAmount,
+creatorPrice/amount/escrowAmount/platformFee/proDiscount, type forced
+barter-or-absent, demoPayment never client-writable on create; upiMdr
+absent-or-0 per BREAKER Cycle 35). Breaks the payout-rule circularity where a
+forged client-created booking with inflated creatorPrice passed the 95%
+payout check.
+
+**Item 4 (inv. 4) — (description pending — held item text not on disk; not invented).**
+
+**Item 5 (inv. 5) — (description pending — held item text not on disk; not invented).**
+
+**Item 6 (inv. 6) — canonical purpose 'booking_payment' (F2):**
+normalizePurpose at register — api/cashfree-order.js:87; recovery 409-guard —
+api/booking-action.js:186–188 (purpose written ≠ 'booking_payment' → 409
+`wrong_purpose`; genuine paid-but-unbooked orders are never blocked).
+
+**Item 7 (inv. 7) — DPDP fixes:** instagram_tokens/{uid} deleted;
+creatorHandles TOMBSTONE (not hard-delete); bookings/wallet anonymized (not
+deleted); honest "anonymized not deleted" sheet copy; 3 money-guard composites
++ booking_messages ASC composite (22→25 indexes in firestore.indexes.json) —
+api/booking-deadlines.js §5, firestore.indexes.json. — CORRECTED (Cycle 45,
+replaces the stale "§3b never wallet-credits a Pro order" claim): the §3b
+canCredit gate (api/booking-deadlines.js:527–528) treats a missing `purpose`
+as bookable, so a Pro/top-up orphan whose registry write failed (purpose never
+written) IS wallet-credited — no Pro activation, no admin signal.
+
+**Item 8 (inv. 8) — UPI MDR kill-switch OFF by default:** UPI_MDR_ENABLED=false
+— lib/pricing.js:33 (posture: deferred past Diwali; Jainik's absorb-vs-pass
+call pending).
+
+**Item 9 (inv. 9) — HELD-OPEN — unmapped (see held-open section below).**
+
+**Item 10 (inv. 10) — (description pending — held item text not on disk; not invented).**
+
+**Item 11 (inv. 11) — rateLimit raw-Node fix:** lib/rateLimit.js — Express-style
+`res.status(429).json(...)` does not exist in raw Node serverless functions
+(it throws and 500s the caller); now uses res.statusCode / res.setHeader /
+res.end. Also takes the RIGHTMOST x-forwarded-for entry (leftmost is
+attacker-controlled) and prunes idle buckets.
+
+**Item 12 (inv. 12) — (description pending — held item text not on disk; not invented).**
+
+**Item 13 (inv. 13) — earnings/refund status fixes:** accumulating counted into
+pending (paintEarnings) + refundedAmount preferred in paintRefundStatus —
+client totals no longer vanish. (13a: connect/creator-connect.js:1082–1086 —
+'accumulating' is a real queued payout, counted with pending; 13b:
+connect/brand-connect.js:496–502 — server-truth refundedAmount preferred.)
+
+**Item 14 (inv. 14) — booking-wizard field collapse for paid package bookings —
+CORRECTED (Cycle 53):** the 6→5 step collapse IS implemented — Review (step 4)
+merges into Payment (step 5) via `b.skippedReview=true`, `b.step=5`
+(connect/brand-connect.js:725–744, "Booking-field collapse (Cycle 21)"); the
+sticky order-summary money strip carries the full money math so skipping the
+review screen hides no rupee. Barter and custom-offer flows keep step 4 (their
+confirm/offer screens live there). The Cycle-51 draft's "never happened
+(RELAY-16 withdrawn)" note was STALE against this code — superseded here.
+
+**Item 15 (inv. 15) — (description pending — held item text not on disk; not invented).**
+
+**Item 16 (inv. 16) — (description pending — held item text not on disk; not invented).**
+
+**Item 17 (inv. 17) — Instagram defer (held description; not expanded).**
+
+**Item 18 (inv. 18) — HELD-OPEN — unmapped (see held-open section below).**
+
+**Item 19 (inv. 19) — paid_no_registry sweep (self-service recovery):** cron
+canCredit + handleRecoverPayment — api/booking-deadlines.js:527–528,
+api/booking-action.js:186–188. — CORRECTED (Cycle 45, replaces the stale
+"refund-request full-refund" claim): self-service is scoped to purpose-absent
+or 'booking_payment'; any orphan row with a written purpose ≠ 'booking_payment'
+(top-up/Pro orphans) 409s `wrong_purpose` → manual-admin-only.
+
+**Item 20 (inv. 20) — (description pending — held item text not on disk; not invented).**
+
+**Item 21 (inv. 21) — (description pending — held item text not on disk; not invented).**
+
+**Item 22 (inv. 22) — cashfree-verify ownership check:** fail-closed 403,
+api/cashfree-verify.js:70–88 (caller may only see an order bound to their UID
+via Cashfree customer_details or their own payment_orders registry row);
+payment_orders rules-absent = default deny. (SENTINEL-C50: the pre-fetch
+registry gate must be SOFT, not fail-closed — registry write is best-effort;
+fail-closed would strand legit payers.)
+
+**Item 23 (inv. 23) — (description pending — held item text not on disk; not invented).**
+
+**Item 24 (inv. 24) — Pro discount cap ₹999:**
+Math.min(Math.round(creatorPrice*0.05), PRO_DISCOUNT_CAP_INR) —
+lib/pricing.js:114 (cap ₹999/month; a ₹10L booking no longer hands back ₹50k).
+
+**Item 25 (inv. 25) — TDS paid-time tracking:** flat payoutFY/payoutFYTotal AND
+nested tdsTracking written in the SAME transaction (drift fixed) —
+api/booking-action.js handlePayoutRelease (:357; write at :469–478), at
+paid-time when the admin actually releases the money. 194J treatment gated on
+a written CA opinion (Jainik manual).
+
+**Item 26 (inv. 26) — Ask-a-question both sides:** prebooking_questions —
+firestore.rules:799 (threads readable by participants, opened by the brand's
+first question, creator can reply).
+
+**Item 27 (inv. 27) — (description pending — held item text not on disk; not invented).**
+
+**Item 28 (inv. 28) — (description pending — held item text not on disk; not invented).**
+
+**Item 29 (inv. 29) — (description pending — held item text not on disk; not invented).**
+
+**Item 30 (inv. 30) — REJECTED by Jainik — not implemented** (button-size
+standardization 38/42/45/48px→44px reverted).
+
+**Item 31 (inv. 31) — (description pending — held item text not on disk; not invented).**
+
+**Item 32 (inv. 32) — HELD-OPEN — unmapped (see held-open section below).**
+
+**Item 33 (inv. 33) — Collabstr-style payout-release admin UI** (Jainik: "do
+what Collabstr does"): Founder Dashboard payouts queue with destination rows,
+UTR collection, release confirm with creator identity — index.html
+loadPayoutQueue (:2706; releasable = pending/accumulating/approved, latest 50),
+api/booking-action.js action 'payout-release' (admins/{uid} gate :358–360,
+fail-closed; terminal-state check — only 'Completed' escrow or 'Cancelled'
+kill_fee releases; payoutnotif_ creator notification in the same transaction,
+idempotent on retry).
+
+**Item 34 (inv. 34) — HELD-OPEN — unmapped (see held-open section below).**
+
+**Item 35 (inv. 35) — HELD-OPEN — unmapped (see held-open section below).**
+
+**Item 36 (inv. 36) — payout-release.js merged into api/booking-action.js:**
+zero dangling callers; api/ 12→11 (one slot headroom under the Vercel Hobby
+12-function limit). Route contract kept identical
+({ idToken, action: 'payout-release', payoutIds, paymentRef? }) so the admin
+UI calls it directly. All stale *.md references to the deleted file updated
+(ARCHITECTURE.md, README.md, PRE-DEPLOY-CHECKLIST.md,
+VERCEL-CONSOLIDATION-PLAN.md); historical CHANGELOG notes kept as history.
+
+**Item 37 (inv. 37) — HELD-OPEN — unmapped (see held-open section below).**
+
+**HELD-OPEN — unmapped items (9/18/32/34/35/37):** cannot be resolved without
+the missing Cycle-43 draft; descriptions are NOT invented. Candidate unnumbered
+implementations from the SHERLOCK checklist (og:image wired,
+instagram-refresh token-persist, paintChecklist on snapshot, 54 cities, Hindi
+toggle, barter notify, vercel.json changes) await inventory mapping. NOTE:
+"Item 37" in the held-inventory (RELAY's E1–E29 docs edit batch) is a DIFFERENT
+numbering — the E-batch is RELAY-held, queued behind the Cycle-36 report, and
+is not this changelog.
+
+**Numbering caution (banked):** the missing Cycle-43 draft used its OWN entry
+sequence, which does not match report inventory numbers — "Item 7/19" in the
+draft ≠ inventory 7/19. Every entry above is keyed by `(inv. NN)` explicitly.
+
+**Contradiction flag (C-A, Cycle 50 — for report-compile time):** FORGE-C49's
+"every client forgery neutralized or self-harm-only" phrasing OVERSTATES —
+SENTINEL-C48's cancelledByBiz-omission fee-theft (~12% platform fee stolen via
+full refund on Active cancel) is PLATFORM-harm, not self-harm. Items 2–4 (rule
+pins) remain REQUIRED and are NOT obviated. Correct the rationale at
+report-compile time.
+
+---
+
+## Cycle 19 batch (NEXUS 24/7, 2026-10-15, commit `30252ac`) — Jainik-approved, all 21 items
+
+**Item 1 — cron index hardening:** `api/booking-deadlines.js` per-query
+try/catch on §1a auto-approve, §1b refund pickups, §2 auto-approve and the
+reconcile job — a missing composite index now degrades to an empty snap for
+that section instead of 500ing the whole daily cron. `firebase deploy --only
+firestore:indexes` still required for the new queries (22 indexes in
+`firestore.indexes.json`; manual, Jainik).
+
+**Items 2+3 — UPI MDR provision:** `lib/pricing.js` adds
+`UPI_MDR_RATE = 0.004`, threshold ₹2,000, cap ₹300 (`upiMdrCharge()`); order
+summary shows a "UPI charges (0.4%)" line; `api/booking-create.js` accepts
+`expectedTotal` OR `expectedTotal + upiMdrCharge` so the first legit UPI
+booking ≥₹2,000 does not 400 on amount_mismatch.
+
+**Item 4 — honest payment dead-end:** when Cashfree keys are unset on the
+gocolllancer project, the booking Pay button reads "Payments coming soon"
+(disabled) instead of "Opening secure payment…" → silent nothing.
+
+**Item 7 — DPDP deletion processor:** new cron §5 in `api/booking-deadlines.js`
+(booking-deadlines.js:532) drains `deletionRequests` (30-day grace, fail-closed
+safety check — a failed check never deletes). Server-side recursive delete.
+
+**Item 8 — creator DPDP parity:** legal links (Privacy / Terms / Data Deletion)
+added to the creator profile. Creator deletion itself still uses a native
+`confirm()` (connect/creator-connect.js:433) — the in-app deletion sheet
+landed only brand-side (see Verification sweep notes).
+
+**Item 9 — payout release API:** NEW `api/payout-release.js` (admin-only via
+`admins/{uid}` doc + rate limit) — "Mark paid" writes to `payouts/{id}` with
+deterministic `payoutrel_{id}` unified-ledger entries (`walletTransactions`,
+type `payout_release`), idempotent on retry. `api/` is now **12/12** — the
+Vercel Hobby function budget is FULL; no new endpoint without merging or
+replacing an existing one.
+
+**Item 10 — TDS/194J tracking:** `api/booking-action.js` + `api/booking-deadlines.js`
+maintain per-creator FY payout totals (`payoutFY`/`payoutFYTotal`) and flag
+`tdsApplicable` at the ₹50,000/FY threshold (`TDS_THRESHOLD_INR` in
+`lib/pricing.js`); creator Earnings shows the FY line. 194J-vs-194O treatment
+gated on a written CA opinion (Jainik manual).
+
+**Item 11 — payout destination validation (rules):** `firestore.rules`
+validates payout destinations server-side: UPI VPA regex, bank account
+9–18 digits, IFSC format, holder > 2 chars. Client checks are bypassable; the
+rules are the real enforcement.
+
+**Item 12 — Invite & Earn caps copy:** caps (₹100 credit, first paid booking
+₹500+, max 20/mo) now stated in the Invite & Earn UI instead of the open-ended
+promise.
+
+**Item 13 — Be On Top REMOVED:** the feature is gone entirely per Jainik's
+"not wanted" — `connect/ai/knowledge.js` entries deleted (zero `beOnTop` /
+"be on top" hits repo-wide); `firestore.rules` adCampaigns block kept as a
+dead tombstone comment.
+
+**Item 14 — booking Details collapsed:** step-3 wizard's 12 optional fields
+moved behind a "More details (optional)" expander (`b.more` toggle,
+index.html).
+
+**Item 15 — server-side state-change notifications:** `api/booking-action.js`
+new `notify` action (Admin SDK, owner-verified) — creator accept/reject and
+brand approve/revise/dispute now notify the other party instead of relying on
+client writes that rules deny.
+
+**Item 16 — Hindi phase 3:** booking flow labels + offline strings
+(`offline_banner`, `back_online_toast`) added to both dicts and wired
+(index.html:2142/2151).
+
+**Item 17 — vercel.json rewrite:** SPA catch-all now excludes `/api/*`
+(`((?!api/).*)`), so API routes can never be swallowed by the homepage
+fallback.
+
+**Item 18 — referral guard:** fail-closed referral crediting + payout render
+audit in `lib/referral.js` / `api/booking-deadlines.js`.
+
+**Item 19 — referredBy first-write-wins:** `firestore.rules:105–115` — once
+set, `referredBy` on the private contact doc is immutable (admins excepted),
+closing the post-signup referral-steal vector.
+
+**Item 20 — creator languages:** `cprof-languages` input writes a `languages[]`
+array on the creator doc; discovery language filter can now actually match.
+
+**Item 21 — nits:** city rename, offline drafts, native-popup cleanup.
+
+**FIX — brand `rows()` unclosed paren:** was breaking the brand SPA render in
+production.
+
+Manual (Jainik): publish `firestore.rules` (payout-UPI + referredBy + contact
+deltas), `firebase deploy --only firestore:indexes`.
+
+## 92bccc0 — blank-screen fix (2026-10-15)
+**Date:** 2026-10-15 18:59 UTC (Jainik-reported live bug)
+
+After role selection → Continue, the app rendered only a blank screen. Root
+cause: 2 JS syntax errors in the iframe app templates inside `index.html`:
+(1) the `MONEY_I18N` `hi` dictionary ended with `'};` instead of `'}};`
+(unclosed object literal, both creator + brand templates); (2) an extra `}`
+in the voice-recognition `setTimeout(...,1600)` callback (both templates).
+Fixed in 8 lines; browser-verified — creator app renders the home screen
+("Hi, Jainik 👋", setup checklist, bottom nav) instead of blank.
+Lesson: i18n/dictionary edits in index.html must be `node --check` validated
+for BOTH src-creator and src-brand script blocks before deploy.
+
+## 804b9d1 — Cycle 18: all 21 approved items (2026-10-15)
+**Date:** 2026-10-15 18:28 UTC (Jainik: "all approved")
+
+- **#1 SCOUT — real creator discovery:** no longer 2 hardcoded demos;
+  creators fetched `limit(200)`, no orderBy, client-side sort/paginate.
+- **#2 GATEKEEPER — scheduled Cycle-17 batch committed** (see `fe05f44`).
+- **#3 ORACLE — UPI MDR provision** (0.4% above ₹2,000, capped ₹300).
+- **#4 GROWTH — brand referral fixed** + creator Invite & Earn UI.
+- **#5 CIRCUIT — Instagram refresh API:** NEW `api/instagram-refresh.js`
+  (Firebase auth + 10/min/IP rate limit; token refresh for connected IG
+  accounts).
+- **#6 HUNTER — brand signup fixed** (+ creator signup verificationStatus fix).
+- **#7 MONET — Pro pricing proposal** (no live change; decision with Jainik).
+- **#8 FORGE — wallet rate-card verification** (parity with booking-create).
+- **#9 PIXEL — bell & menu wired** (both apps; notif readers end the
+  write-only `*Notifs` problem).
+- **#10 STRATEGOS — Cleo Pro price 799 → 999** (consistent with live ₹999/mo).
+- **#11 LEDGER — payout UPI details path** (creator "Add UPI" form).
+- **#12 INSIGHT — analytics + founder dashboard** (needs `measurementId`).
+- **#13 AURA — 36 cities** (was 5; now 46).
+- **#14 DESI — legal pages + DPDP deletion** (brand side).
+- **#15 DESI — Hindi phase 2.**
+- **#16 SCOUT — portfolio checklist fix** (`portfolioMediaIds` written by
+  profile save).
+- **#18 BREAKER — referral caps** (20/mo, min ₹500; transactional).
+- **#19 ATLAS — Vercel consolidation plan** (doc; the 12-function budget).
+- **#20 MOTION — native dialogs → in-app sheets.**
+- **#21 DATAWAVE — index definitions** (manual Firebase deploy pending).
+Also: `VERCEL-CONSOLIDATION-PLAN.md` added.
+
+## fe05f44 — scheduled Cycle-17 batch (2026-10-15 18:20 UTC)
+Rebook-safe ids, Firestore LLM quota, brand-signup fix, refund index:
+- `api/refund-request.js` **deleted** (245 lines; zero callers) — refunds now
+  run exclusively through cron §1b server-side math + ledger. `api/` went
+  11 → 10 files at the time; now 12/12 with instagram-refresh.js +
+  payout-release.js.
+- `lib/rebook.js` tracked (rebook-safe `collab_{fp}_rN` ids; fixed the live
+  `ERR_MODULE_NOT_FOUND` crash in booking-create).
+- `/api/llm.js` per-uid quota moved to Firestore-backed buckets (fail-closed).
+- Brand signup: `proSubscription:null` write removed (rule-whitelist
+  violation that rejected the whole doc create).
+- Composite index `bookings(status, refundRequested)` for the refund pickup.
+
+## b35809b — discovery nano fix (2026-10-15 18:13 UTC)
+Discovery previously took only the top-60 by followers — nano/micro creators
+(India's real creator economy) were invisible. Now: creators fetched
+`limit(200)` with no orderBy, client-side `recommended` sort
+(`engagement*100 − log10(followers)*2`).
+
+## 8595e11 — SENTINEL security fixes (2026-10-15 18:11 UTC)
+- XSS in the review popup (`api/booking-action.js`, `index.html`).
+- Referral farming guard (`lib/referral.js` + `api/booking-deadlines.js`).
+
+## Cycle 16 backend batch (FORGE, 2026-10-15, committed as part of `fe05f44`)
 
 **Item 24 — brand-cancel refund executor gap (FIXED):** `cancelBooking()`
 attaches `refundRequested`/`refundAmount`/`statusBeforeCancel`/`cancelledByBiz`
@@ -152,8 +488,8 @@ except Cycle 3 #5 (escrow release admin panel — skipped).
 **Skipped / manual-only:**
 - Cycle 3 #5 (escrow release admin panel) — not approved, skipped.
 - Needs Jainik in consoles: publish `firestore.rules` + `firestore.indexes.json`
-  (Firebase), set `CRON_SECRET` (Vercel), Instagram redirect-URI verification (Meta),
-  Cashfree webhook config.
+  (Firebase); Instagram redirect-URI verification (Meta),
+  Cashfree webhook config. (`CRON_SECRET` is ON HOLD per Jainik — do NOT set.)
 
 Detail: `FIXES-CYCLE34.md`.
 
@@ -200,8 +536,9 @@ closed (410 gone), API responding.
 #17 (firestore-rules review) left manual for Jainik in the Firebase console.
 Detail: `FIXES-CYCLE2.md`.
 
-**Standing caveat:** `CRON_SECRET` must be set in the Vercel dashboard or the money
-cron returns 401 (still pending).
+**Standing caveat:** `CRON_SECRET` is **ON HOLD per Jainik — do NOT set**. The
+scheduled money cron authenticates via Vercel's `x-vercel-cron: 1` header; the
+secret only gates manual invocations.
 
 ---
 

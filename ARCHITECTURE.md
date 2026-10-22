@@ -78,3 +78,84 @@ decision is on record.)*
 **Do not refactor yet.** The standing design boundary ("do not touch the
 app's design") plus the deploy-permission rule mean any unification work
 needs Jainik's explicit go-ahead and a dedicated, verified workstream.
+
+---
+
+## Backend architecture (added 2026-10-16)
+
+### Money chain (server-owned, end to end)
+
+1. **Order:** brand pays via `POST /api/cashfree-order` (Firebase auth; server
+   recomputes the charge from the rate card — client `amount` honored only for
+   `wallet_topup` within ₹100–₹1,00,000). Cashfree order registered in
+   `payment_orders/{orderId}` as `created`; `notify_url` → webhook.
+2. **Booking:** `POST /api/booking-create` (Firebase auth) fetches the Cashfree
+   order server-side → requires `order_status === 'PAID'` → server-recomputes
+   the expected total via `lib/pricing.js` canonical math → 409s on order reuse
+   → atomic booking + registry write. Wallet path goes through
+   `/api/book-with-wallet` (same math). Barter bookings are client-written
+   `collab_{fp}` docs.
+3. **State changes:** `POST /api/booking-action` (`approve` / `revise` /
+   `dispute` / `cancel` / `notify`) — auth, ownership checks, deterministic
+   `payout_{bookingId}` docs on approve, kill-fee math on cancel. Cross-party
+   notifications go out through the server (`notify` action) because rules
+   deny client writes to the other party's feed.
+4. **Release:** admin marks payouts paid via `POST /api/booking-action`
+   (body `action: 'payout-release'`, `admins/{uid}` doc required) →
+   `payoutrel_{id}` ledger rows in the unified `walletTransactions` collection.
+   (`api/payout-release.js` was merged into `api/booking-action.js`; the old
+   endpoint is gone — same request contract, admin UI unchanged.)
+5. **Webhook safety net:** `POST /api/cashfree-webhook` (HMAC-SHA256
+   `timestamp+rawBody` signature, idempotent `cashfree_events`) credits wallet
+   top-ups and Pro subscriptions; paid-but-unbooked orders land in
+   `unclaimed_payments` for the daily reconcile.
+
+### Canonical pricing (`lib/pricing.js` — the server source of truth)
+
+- Brand total: **5% Pro discount off the creator price FIRST, then 12%
+  platform fee on the discounted price** (`canonicalTotal()`).
+- Creator share: **95% of the listed package price** (`creatorShare()`).
+- UPI MDR: 0.4% on the payable amount for UPI hinted orders ≥ ₹2,000, capped
+  at ₹300 (`upiMdrCharge()`); shown as an explicit line item.
+- TDS hooks: `TDS_THRESHOLD_INR = 50000`, `fyLabel()`, `tdsApplicable` flags on
+  payout docs. 194J-vs-194O deduction treatment is NOT implemented — gated on
+  a written CA opinion.
+- No GST anywhere in the money math (Jainik: removed entirely until turnover
+  nears ₹20L/yr).
+
+### Firestore rules posture
+
+- Money-flow enforcement lives in `firestore.rules` (765 lines) and is
+  server-enforced only **after a manual console publish** (deploys never
+  publish rules). Key guards: `bookingCreateMoneySafe` (server-truth amounts),
+  refund clamp (`refundAmount ≤ paidAmount`), payout destination format
+  validation, `referredBy` first-write-wins, private-contact PII lockdown,
+  `walletTransactions` server-owned.
+- Client-side rules-deny on cross-party notifs is deliberate; the server
+  `notify` action is the write path.
+
+### Cron jobs (`api/booking-deadlines.js`, daily 02:00 UTC, vercel.json)
+
+1. Auto-cancel expired Pending bookings (with try/catch per query — a missing
+   index degrades instead of 500ing the whole run).
+2. Auto-approve expired PendingCompletion bookings (creator payout queued).
+3. Refund pickup §1b: `refundProcessed == false` + `refundRequested == true`
+   (server-truth `paidAmount`/`platformFee`; idempotent).
+4. Reconcile paid-but-unbooked Cashfree orders.
+5. Expire Business Pro subscriptions (30-day).
+6. DPDP data deletion requests (30-day grace, fail-closed safety check).
+
+Auth: Vercel's `x-vercel-cron: 1` header for the scheduled path; `CRON_SECRET`
+Bearer for manual invocations (fail-closed; currently ON HOLD per Jainik).
+
+### API function budget
+
+Vercel Hobby allows **12 serverless functions**; `api/` is now **11/12**
+(book-with-wallet, booking-action, booking-create, booking-deadlines,
+cashfree-order, cashfree-verify, cashfree-webhook, instagram-callback,
+instagram-refresh, instagram-start, llm) — `api/payout-release.js` was merged
+into `api/booking-action.js` (one slot headroom). Any new endpoint must still
+merge into an existing file or replace a removed one. `api/` and `lib/`
+are imported across boundaries — every import must resolve to a TRACKED file
+(the `lib/rebook.js` lesson: a live `ERR_MODULE_NOT_FOUND` took bookings
+down because the file was never committed).

@@ -30,7 +30,7 @@ function esc(t) {
     return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c];
   });
 }
-/* inr() removed — uses the single global from index.html (Item 28, Cycle 16). */
+/* inr() is defined top-level in the creator template document (Item 1, Cycle 34) — srcdoc iframes do not share the shell's scope. */
 function fmtCount(n) {
   n = Number(n || 0);
   if (n >= 10000000) return (n / 10000000).toFixed(1).replace(/\.0$/, '') + 'Cr';
@@ -56,6 +56,7 @@ function agoStr(ts) {
   } catch (e) { return ''; }
 }
 function toast(msg) {
+  if (typeof toastDedupe === 'function' && toastDedupe(msg)) return;
   var t = $('#ccon-toast');
   if (!t) {
     t = document.createElement('div');
@@ -147,6 +148,7 @@ function afterLogin(u) {
   loadMarket();
   loadPortfolio();
   loadCreatorNotifications();
+  loadQuestionInbox(); /* Item 26 (Cycle 21): pre-booking questions inbox */
   try { window.CollancerToast = toast; } catch (e) {}
 }
 
@@ -182,7 +184,7 @@ function cconSheet(title, sub, bodyHtml) {
     + '<div style="font-size:21px;font-weight:800;letter-spacing:-.3px">' + esc(title) + '</div>'
     + (sub ? '<div style="font-size:13px;color:#55616d;margin-top:2px">' + esc(sub) + '</div>' : '')
     + '</div><button type="button" data-ccon-close aria-label="Close" style="width:38px;height:38px;flex:none;border-radius:50%;border:1px solid rgba(15,40,60,.12);background:rgba(255,255,255,.7);font-size:18px;font-weight:800;cursor:pointer;color:#0b1217">✕</button></div>'
-    + '<div style="margin-top:12px">' + bodyHtml + '</div></div>';
+    + '<div id="ccon-sheet-body" style="margin-top:12px">' + bodyHtml + '</div></div>';
   document.body.appendChild(ov);
   ov.addEventListener('click', function (e) {
     if (e.target.closest('[data-ccon-close]')) { ov.remove(); }
@@ -206,12 +208,13 @@ function showCreatorNotifHistory() {
           + '</div>';
       });
       if (!html) html = '<div style="text-align:center;padding:20px 0;font-size:13.5px;color:#8a94a0">No notifications yet.<br>Booking updates will appear here.</div>';
+      /* 6f (Cycle 21): stable id instead of the fragile inline-style selector. */
       var ov = $('#ccon-sheet');
-      if (ov) { var body = ov.querySelector('div[style*="margin-top:12px"]'); if (body) body.innerHTML = html; }
+      if (ov) { var body = ov.querySelector('#ccon-sheet-body'); if (body) body.innerHTML = html; }
     })
     .catch(function () {
       var ov = $('#ccon-sheet');
-      if (ov) { var body = ov.querySelector('div[style*="margin-top:12px"]'); if (body) body.innerHTML = '<div style="text-align:center;padding:20px 0;font-size:13.5px;color:#8a94a0">Could not load notifications.</div>'; }
+      if (ov) { var body = ov.querySelector('#ccon-sheet-body'); if (body) body.innerHTML = '<div style="text-align:center;padding:20px 0;font-size:13.5px;color:#8a94a0">Could not load notifications.</div>'; }
     });
 }
 
@@ -337,6 +340,9 @@ function initMoneyLangToggle() {
         var nl = (window.moneyLang && window.moneyLang() === 'hi') ? 'en' : 'hi';
         if (window.setMoneyLang) window.setMoneyLang(nl);
         if (window.applyMoneyLang) window.applyMoneyLang();
+        /* Repaint dynamic money copy (payout history pills, FY/TDS line)
+         * so it follows the new language immediately. */
+        try { if (typeof paintEarnings === 'function') paintEarnings(); } catch (e2) {}
       } catch (e) {}
     });
     bh.appendChild(b);
@@ -426,25 +432,17 @@ function wireEvents() {
       FB.logout().then(function () { try { Collancer.go('login'); } catch (x) {} });
       return;
     }
-    /* Item 14 (DESI, Cycle 18): DPDP data deletion request from creator profile. */
-    var cdel = q('[data-cdel]');
-    if (cdel) {
-      e.stopPropagation(); e.preventDefault();
-      if (!confirm('Request deletion of your account and all personal data?\n\nThis deletes your profile, contact info, portfolio, packages, booking history, and notifications. Wallet records are settled first. Our team processes requests within 30 days (DPDP Act, 2023).')) return;
-      try {
-        var au = FB.auth && FB.auth.currentUser;
-        if (!au) { toast('Please log in to request deletion.'); return; }
-        FB.db.collection('deletionRequests').add({
-          uid: au.uid, email: au.email || '',
-          status: 'pending', createdAt: FB.serverStamp()
-        }).then(function(){ toast('Deletion request submitted. We\u2019ll process it within 30 days.'); })
-          .catch(function(){ toast('Could not submit. Email support@collancer.in.'); });
-      } catch (x) { toast('Could not submit. Please try again.'); }
-      return;
-    }
+    /* Item 5 (Cycle 21): DPDP deletion is now an in-app sheet owned by the
+     * profile script (index.html, Item 8 Cycle 19 panel). The old native
+     * confirm() interception here is REMOVED — it fired in capture phase and
+     * shadowed the sheet. Clicks on [data-cdel] now bubble to the panel. */
     var igBtn = q('button.black');
     if (igBtn && /connect instagram/i.test(igBtn.textContent)) {
       e.stopPropagation(); e.preventDefault(); connectInstagram(); return;
+    }
+    /* Item 17: "Do it later" defers the Instagram step (nano creators). */
+    if (q('#ccon-ig-defer')) {
+      e.stopPropagation(); e.preventDefault(); deferInstagram(); return;
     }
     if (q('#s-earnings #rq')) { e.stopPropagation(); e.preventDefault(); requestPayout(); return; }
     if (q('#s-ai #go')) { e.stopPropagation(); e.preventDefault(); aiSend(false); return; }
@@ -475,6 +473,10 @@ function loadCreatorDoc() {
     if (!snap.exists) return;
     creatorDoc = snap.data(); creatorDoc.id = uid;
     paintProfile();
+    /* 6e (Cycle 21): re-run the checklist on snapshot updates so steps tick
+     * when the doc changes (IG connect, portfolio pins, prices), not only at
+     * init and after profileShared. */
+    try { paintChecklist(); } catch (e) {}
   }));
 }
 function paintProfile() {
@@ -520,6 +522,11 @@ function paintProfile() {
         igBtn.style.opacity = '';
       }
     }
+    /* Item 17: hide "Do it later" once Instagram is connected or deferred. */
+    try {
+      var igDeferBtn = document.getElementById('ccon-ig-defer');
+      if (igDeferBtn) igDeferBtn.style.display = (ig.username || igDeferred()) ? 'none' : '';
+    } catch (e2) {}
     /* No package prices set -> nudge the creator once per session, and show
      * a persistent banner on the Rate card ("Your packages") section until
      * prices are set. Custom offers and barter still work without prices. */
@@ -560,7 +567,15 @@ function prefillProfileInputs() {
   set('cprof-name', d.name); set('cprof-handle', d.handle); set('cprof-bio', d.bio);
   set('cprof-headline', d.headline); set('cprof-platform', d.platform); set('cprof-niche', d.niche);
   set('cprof-city', d.city);
-  set('cprof-languages', Array.isArray(d.languages) ? d.languages.join(', ') : d.languages);
+  /* Item 3 (Cycle 21): languages are a chip multi-select now — restore 'on'
+   * state from the stored array (legacy comma string also tolerated). */
+  try {
+    var _langs = Array.isArray(d.languages) ? d.languages : String(d.languages || '').split(',');
+    var _norm = _langs.map(function (s) { return String(s).trim().toLowerCase(); });
+    Array.prototype.forEach.call(document.querySelectorAll('#cprof-langtags .tag'), function (t) {
+      t.classList.toggle('on', _norm.indexOf(String(t.getAttribute('data-lang') || '').toLowerCase()) > -1);
+    });
+  } catch (e3) {}
   set('cprof-followers', d.followers); set('cprof-engagement', d.engagement);
   set('cprof-views', d.avgViews); set('cprof-likes', d.avgLikes); set('cprof-reach', d.reach);
   set('cprof-social', d.socialLink); set('cprof-youtube', d.youtube);
@@ -606,7 +621,9 @@ function paintChecklist() {
   var hasPortfolio = !!((d.portfolioMediaIds && d.portfolioMediaIds.length) ||
     (d.featuredMediaIds && d.featuredMediaIds.length) || (d.portfolio && d.portfolio.length));
   var steps = [
-    { label: 'Connect Instagram', done: !!(d.instagram && d.instagram.username) },
+    /* Item 17: the Instagram step also ticks when the creator deferred it
+     * ("Do it later") — nano creators complete the funnel via barter. */
+    { label: 'Connect Instagram', done: !!((d.instagram && d.instagram.username) || igDeferred()) },
     { label: 'Pin portfolio posts', done: hasPortfolio },
     { label: 'Set package prices', done: hasPrices },
     { label: 'Share your profile link', done: !!d.profileShared },
@@ -646,9 +663,17 @@ function shareProfileLink() {
 
 /* Referral: each creator gets a code (= their handle). The code is captured at
  * signup and stored in the private contact doc. When a referred creator
- * completes their first booking, the referrer earns Rs.100 credit (server-side
+ * completes their first booking, the referrer earns ₹100 credit (server-side
  * via lib/referral.js). */
 function getReferralCode() {
+  /* Item 2 (referral attribution): the creator app runs in a srcdoc iframe
+   * where location.search is always empty, so ?ref= is captured on shell load
+   * into sessionStorage ('collancer_ref_code', index.html). Read that first;
+   * location.search remains as a fallback (e.g. non-iframe contexts). */
+  try {
+    var s = sessionStorage.getItem('collancer_ref_code');
+    if (s) return String(s).toLowerCase();
+  } catch (e) {}
   try {
     var m = /[?&]ref=([a-zA-Z0-9_.]+)/.exec(location.search || '');
     return m ? m[1].toLowerCase() : null;
@@ -715,9 +740,15 @@ function saveProfile() {
   var name = _val('cprof-name'), handle = _val('cprof-handle').toLowerCase().replace(/[^a-z0-9_.]/g, '');
   var bio = _val('cprof-bio'), headline = _val('cprof-headline');
   var platform = _val('cprof-platform') || 'Instagram', niche = _val('cprof-niche'), city = _val('cprof-city');
-  /* Item 20 (Cycle 19): languages the creator works in — stored as an array
-   * so the brand discovery language filter can match. */
-  var languages = _val('cprof-languages').split(',').map(function (s) { return s.trim().slice(0, 30); }).filter(Boolean).slice(0, 10);
+  /* Item 3 (Cycle 21): languages from the chip multi-select — stored as an
+   * array of codes so the brand discovery language filter can match. */
+  var languages = [];
+  try {
+    Array.prototype.forEach.call(document.querySelectorAll('#cprof-langtags .tag.on'), function (t) {
+      var lv = t.getAttribute('data-lang'); if (lv) languages.push(lv);
+    });
+  } catch (e) {}
+  languages = languages.slice(0, 12);
   if (!name) { toast('Please enter your display name.'); if (btn) btn.disabled = false; return; }
   if (!handle) { toast('Please choose a handle.'); if (btn) btn.disabled = false; return; }
   if (bio && bio.length < 10) { toast('Bio needs at least 10 characters.'); if (btn) btn.disabled = false; return; }
@@ -848,6 +879,24 @@ function connectInstagram() {
       }
     })
     .catch(function () { toast('Could not start Instagram connect. Please try again.'); });
+}
+
+/* Item 17 (IG-connect defer): nano creators may not have Instagram yet. The
+ * "Do it later" button on the profile IG card sets this per-user flag so the
+ * onboarding checklist's Instagram step stops blocking and they can complete
+ * the funnel via the barter path. Connecting Instagram later clears the
+ * block naturally (the connected state wins in paintChecklist). */
+function igDeferred() {
+  try { return !!localStorage.getItem('collancer_ig_deferred_' + uid); } catch (e) { return false; }
+}
+function deferInstagram() {
+  try { localStorage.setItem('collancer_ig_deferred_' + uid, '1'); } catch (e) {}
+  toast('No problem \u2014 you can connect Instagram anytime from your profile.');
+  try {
+    var b = document.getElementById('ccon-ig-defer');
+    if (b) b.style.display = 'none';
+  } catch (e) {}
+  try { paintChecklist(); } catch (e) {}
 }
 
 /* ---------------- bookings ---------------- */
@@ -1015,9 +1064,78 @@ function loadBookings() {
 }
 
 /* ---------------- earnings ---------------- */
+/* Item 30 (payout-queue UI): prefill the creator's last-used payout
+ * destination. On earnings-form load, ask the server for the caller's most
+ * recent payout destination (payout-last-destination) and fill the UPI input
+ * when a value exists and the field is still empty. Fallback: the server
+ * reads the single-string `destination` field, which the current creator
+ * save flow never writes (it writes method/upi/… via the scoped
+ * firestore.rules update branch) — so also check the caller's own latest
+ * payoutRequest `upi` field directly (owner read is rules-allowed).
+ * Read-only prefill; the save flow (submitPayout) is untouched. */
+function prefillLastDestination(){
+  var root = $('#s-earnings');
+  var upiInp = root && $('#upi', root);
+  if(!upiInp || window._lastDestTried) return;
+  window._lastDestTried = true;
+  function setIfEmpty(sel, v){
+    var el = root && $(sel, root);
+    v = String(v || '').trim();
+    if(el && v && !el.value) el.value = v;
+  }
+  function setMethod(m){
+    try{
+      var t = root.querySelector('#mt>div[data-m="' + m + '"]');
+      if(t && !t.classList.contains('on')) t.click();
+    }catch(e){}
+  }
+  /* Item 30 fix: prefill the BANK form too, not just the UPI input. Bank
+   * fields (#hn holder, #an account, #ifs IFSC) fill when the last-used
+   * destination was a bank payout; the method toggle follows. */
+  function fillBank(d){
+    var any = false;
+    if(String(d.holder || '').trim()){ setIfEmpty('#hn', d.holder); any = true; }
+    if(String(d.account || '').trim()){ setIfEmpty('#an', d.account); any = true; }
+    if(String(d.ifsc || '').trim()){ setIfEmpty('#ifs', d.ifsc); any = true; }
+    if(any) setMethod('bank');
+    return any;
+  }
+  function fillFrom(r){
+    if(!r) return false;
+    var isBank = String(r.method || '') === 'bank' ||
+      (!!String(r.holder || r.account || '').trim() && !String(r.upi || '').trim());
+    if(isBank) return fillBank(r);
+    var d = r.destination ? String(r.destination).trim() : String(r.upi || '').trim();
+    if(d){ setIfEmpty('#upi', d); return true; }
+    return false;
+  }
+  function fallback(){
+    try{
+      DB.collection('payoutRequests').where('creatorId', '==', uid).limit(25).get().then(function(snap){
+        var best = null, bestAt = -1;
+        snap.forEach(function(doc){
+          var d = doc.data() || {};
+          var u = String(d.upi || d.destination || '').trim();
+          if(!u && !d.holder && !d.account) return;
+          var c = d.createdAt, at = (c && c.toMillis) ? c.toMillis() : 0;
+          if(at >= bestAt){ bestAt = at; best = d; }
+        });
+        fillFrom(best);
+      }).catch(function(){});
+    }catch(e){}
+  }
+  try{
+    if(window.FB && FB.api){
+      FB.api('booking-action', { action: 'payout-last-destination' }).then(function(r){
+        if(!fillFrom(r)) fallback();
+      }).catch(function(){ fallback(); });
+    }else{ fallback(); }
+  }catch(e){ fallback(); }
+}
 function paintEarnings() {
   var root = $('#s-earnings');
   if (!root) return;
+  prefillLastDestination();
   var released = 0, locked = 0;
   creatorBookings.forEach(function (b) {
     var share = Number(b.price || 0) * 0.95;
@@ -1028,7 +1146,12 @@ function paintEarnings() {
   DB.collection('payoutRequests').where('creatorId', '==', uid).get().then(function (snap) {
     snap.forEach(function (doc) {
       var d = doc.data(), a = Number(d.amount || 0);
-      if (d.status === 'pending') pending += a;
+      /* Item 13a: 'accumulating' is a real queued payout (sub-₹100 shares the
+       * server queues via /api/booking-action + booking-deadlines; admin
+       * combines them with future payouts). It was silently dropped from the
+       * stats though the money is still withdrawable — count it with pending
+       * (queued, awaiting release), same as any other unreleased payout. */
+      if (d.status === 'pending' || d.status === 'accumulating') pending += a;
       else if (d.status === 'approved' || d.status === 'paid' || d.status === 'completed') successful += a;
     });
     var avail = Math.max(0, released - successful - pending);
@@ -1043,10 +1166,11 @@ function paintEarnings() {
       root._avail = avail;
     } catch (e) {}
     // Item 10 (Cycle 19): TDS/194J — show FY payout total. Reads the
-    // server-maintained creators/{uid}.payoutFY{,Total}; created on demand
-    // with the existing .m style (no new visual language).
+    // server-maintained creators/{uid}/private/tdsTracking counters
+    // (SENTINEL-287: kept off the world-readable public creators doc);
+    // created on demand with the existing .m style (no new visual language).
     try {
-      DB.collection('creators').doc(uid).get().then(function (csnap) {
+      DB.collection('creators').doc(uid).collection('private').doc('tdsTracking').get().then(function (csnap) {
         var cd = csnap.exists ? (csnap.data() || {}) : {};
         var fy = cd.payoutFY, total = Number(cd.payoutFYTotal || 0);
         var line = root.querySelector('#fyline');
@@ -1061,21 +1185,33 @@ function paintEarnings() {
           }
         }
         if (line) {
-          if (fy) {
-            line.textContent = 'FY ' + fy + ' payouts: ' + inr(Math.round(total)) +
-              (cd.tdsApplicable ? ' · TDS applicable' : '');
-            line.style.display = '';
-          } else {
-            line.style.display = 'none';
-          }
+          /* Item 7 (Cycle 21): TDS copy only — no deduction logic (server-side
+           * agent owns the data hooks). The FY ₹50k threshold concept stays
+           * visible even before any FY payouts exist. */
+          var tdsNote = cd.tdsApplicable
+            ? 'TDS may apply above \u20B950,000 this FY (CA opinion pending).'
+            : 'TDS: not deducted yet (CA opinion pending). Applies on FY payouts above \u20B950,000.';
+          line.textContent = (fy ? 'FY ' + fy + ' payouts: ' + inr(Math.round(total)) + ' \u00B7 ' : '') + tdsNote;
+          line.style.display = '';
         }
       }).catch(function () {});
     } catch (e) {}
     paintPayoutHistory();
   }).catch(function () {});
 }
-function paintPayoutHistory() {
-  var root = $('#s-earnings');
+/* 6a (Cycle 21): payout status labels resolve through the money-screen i18n
+ * (window.tM) so Hindi mode shows Hindi. Falls back to English. */
+function payoutStatusLabel(s) {
+  var t = function (k) { try { return window.tM ? window.tM(k) : k; } catch (e) { return k; } };
+  if (s === 'pending') return t('Pending');
+  /* Item 13a: 'accumulating' previously fell through to the raw status key.
+   * Resolve it through the money i18n dict ('Accumulating (under ₹100)' /
+   * Hindi) like every other payout status. */
+  if (s === 'accumulating') return t('Accumulating');
+  if (s === 'approved' || s === 'paid' || s === 'completed') return t('Paid out');
+  return s || '';
+}
+function paintPayoutHistory() {  var root = $('#s-earnings');
   var pz = root && $('#pz', root);
   if (!pz) return;
   DB.collection('payoutRequests').where('creatorId', '==', uid).orderBy('createdAt', 'desc').limit(20).get()
@@ -1083,7 +1219,9 @@ function paintPayoutHistory() {
       if (snap.empty) return; // keep the designed empty state
       var html = snap.docs.map(function (doc) {
         var d = doc.data();
-        var st = d.status === 'pending' ? 'Pending' : (d.status || '');
+        /* 6a (Cycle 21): payout status labels through tM() — no hardcoded
+         * English in Hindi mode. */
+        var st = payoutStatusLabel(d.status);
         return '<div class="glass card" style="margin-top:12px"><div style="display:flex;justify-content:space-between;align-items:center">' +
           '<div><div style="font-size:15px;font-weight:800">' + inr(d.amount) + '</div>' +
           '<div style="font-size:12px;color:#55616d;margin-top:2px">' + esc(agoStr(d.createdAt)) + ' \u00B7 ' + esc(d.method || 'UPI') + '</div></div>' +
@@ -1121,9 +1259,12 @@ function eligiblePayoutBookings() {
       ps.forEach(function (d) {
         var b = d.data() || {};
         if (!b.bookingId) return;
-        // Only payout_ docs are creator-actionable here: killfee_* and ref_*
-        // docs share this collection but are admin/referral flows, never
-        // Completed-booking payouts the creator should add details to.
+        // Only payout_ docs are creator-actionable here. killfee_* docs are
+        // the creator's compensation when a brand cancels an Active booking
+        // (10% of the paid amount, capped at the retained platform fee, queued
+        // by the refund cron for admin release), and ref_* docs are referral
+        // credits — both are admin-released, so the creator never adds payout
+        // details to them.
         if (d.id.indexOf('payout_') !== 0) { done[b.bookingId] = true; return; }
         var hasDest = (b.upi && String(b.upi).trim()) || (b.account && String(b.account).trim());
         if (hasDest || b.status !== 'pending') done[b.bookingId] = true;
@@ -1175,31 +1316,44 @@ function renderPayoutPicker(list) {
     });
   });
 }
-function continuePayout(b) {
+/* 6b (Cycle 21): destination-confirm sheet. Consumes the validated dest/amt
+ * snapshot and shows it back (masked) for an explicit confirm before anything
+ * is queued — both the create path and the needsDetails update path. */
+function maskUpi(u) {
+  u = String(u || ''); var p = u.split('@');
+  if (p.length !== 2 || p[0].length < 2) return u;
+  return p[0].slice(0, 2) + '***@' + p[1];
+}
+function maskAcct(a) {
+  a = String(a || '').replace(/\D/g, '');
+  return a.length > 4 ? '****' + a.slice(-4) : '****';
+}
+function confirmPayoutSheet(b, amt, dest, onConfirm) {
+  var destLine = dest.method === 'upi'
+    ? 'UPI&nbsp;' + esc(maskUpi(dest.upi))
+    : 'A/C&nbsp;' + esc(maskAcct(dest.account)) + ' · IFSC&nbsp;' + esc(dest.ifsc);
+  cconSheet('Confirm payout',
+    'Check the destination carefully — payouts cannot be reversed once sent.',
+    '<div class="glass card" style="padding:6px 16px">'
+    + '<div style="display:flex;justify-content:space-between;align-items:center;padding:9px 0;border-bottom:1px solid rgba(15,40,60,.08)"><span style="color:#55616d;font-size:13.5px">Amount</span><b style="font-size:16px">' + inr(amt) + '</b></div>'
+    + '<div style="display:flex;justify-content:space-between;align-items:center;padding:9px 0;border-bottom:1px solid rgba(15,40,60,.08)"><span style="color:#55616d;font-size:13.5px">Destination</span><b style="font-size:14px;text-align:right">' + destLine + '</b></div>'
+    + '<div style="display:flex;justify-content:space-between;align-items:center;padding:9px 0"><span style="color:#55616d;font-size:13.5px">Booking</span><b style="font-size:14px;text-align:right;max-width:58%">' + esc(b.campaign || 'Collaboration') + (b.biz ? ' · ' + esc(b.biz) : '') + '</b></div>'
+    + '</div>'
+    + '<div style="display:flex;gap:10px;margin-top:14px">'
+    + '<button type="button" class="black" id="ccon-pok" style="flex:1;height:44px;border-radius:22px">Confirm payout</button>'
+    + '<button type="button" class="tag glass" id="ccon-pox" style="flex:1;height:44px;border-radius:22px;justify-content:center;font-weight:700">' + (window.tM ? window.tM('Cancel') : 'Cancel') + '</button>'
+    + '</div>');
+  var ov = document.getElementById('ccon-sheet');
+  if (ov) {
+    var ok = ov.querySelector('#ccon-pok'), no = ov.querySelector('#ccon-pox');
+    if (ok) ok.addEventListener('click', function () { cconCloseSheet(); onConfirm(); });
+    if (no) no.addEventListener('click', function () { cconCloseSheet(); });
+  }
+}
+/* The actual queue write, extracted so the confirm sheet gates it. */
+function submitPayout(b, amt, dest) {
   var root = $('#s-earnings');
   var amtEl = $('#amt', root), erEl = $('#er', root);
-  if (!b || !b.id) { erEl.textContent = 'No completed booking selected.'; return; }
-  // Canonical amount: the rule demands EXACT Math.round(creatorPrice * 0.95).
-  var amt = Math.round(Number(b.creatorPrice || 0) * 0.95);
-  if (!(amt >= 100)) { erEl.textContent = 'This booking has no withdrawable payout.'; return; }
-  if (amtEl) amtEl.value = String(amt); // display the canonical amount
-  var meth = 'upi';
-  var mtOn = root.querySelector('#mt .on');
-  if (mtOn) meth = mtOn.dataset.m || 'upi';
-  var dest = {}, ok = false;
-  if (meth === 'upi') {
-    var upi = ($('#upi', root).value || '').trim();
-    ok = /^[\w.\-]{2,}@[a-zA-Z]{2,}$/.test(upi);
-    if (!ok) { erEl.textContent = 'Enter a valid UPI ID.'; return; }
-    dest = { method: 'upi', upi: upi };
-  } else {
-    var hn = ($('#hn', root).value || '').trim();
-    var an = ($('#an', root).value || '').trim();
-    var ifs = ($('#ifs', root).value || '').trim().toUpperCase();
-    ok = hn.length > 2 && /^\d{6,18}$/.test(an) && /^[A-Za-z]{4}0[A-Za-z0-9]{6}$/.test(ifs);
-    if (!ok) { erEl.textContent = 'Enter valid bank details.'; return; }
-    dest = { method: 'bank', holder: hn, account: an, ifsc: ifs };
-  }
   erEl.textContent = 'Submitting payout request\u2026';
   // Item 11 (Cycle 17, LEDGER): the payout doc may already exist — queued by
   // the server on brand-approve / cron auto-approve without destination
@@ -1235,6 +1389,35 @@ function continuePayout(b) {
     try { if (typeof track === 'function') track('payout_requested', { amount: amt, method: dest.method }); } catch (e) {}
     paintEarnings();
   }).catch(function () { erEl.textContent = 'Could not submit. Please try again.'; });
+}
+function continuePayout(b) {
+  var root = $('#s-earnings');
+  var amtEl = $('#amt', root), erEl = $('#er', root);
+  if (!b || !b.id) { erEl.textContent = 'No completed booking selected.'; return; }
+  // Canonical amount: the rule demands EXACT Math.round(creatorPrice * 0.95).
+  var amt = Math.round(Number(b.creatorPrice || 0) * 0.95);
+  if (!(amt >= 100)) { erEl.textContent = 'This booking has no withdrawable payout.'; return; }
+  if (amtEl) amtEl.value = String(amt); // display the canonical amount
+  var meth = 'upi';
+  var mtOn = root.querySelector('#mt .on');
+  if (mtOn) meth = mtOn.dataset.m || 'upi';
+  var dest = {}, ok = false;
+  if (meth === 'upi') {
+    var upi = ($('#upi', root).value || '').trim();
+    ok = /^[\w.\-]{2,}@[a-zA-Z]{2,}$/.test(upi);
+    if (!ok) { erEl.textContent = 'Enter a valid UPI ID.'; return; }
+    dest = { method: 'upi', upi: upi };
+  } else {
+    var hn = ($('#hn', root).value || '').trim();
+    var an = ($('#an', root).value || '').trim();
+    var ifs = ($('#ifs', root).value || '').trim().toUpperCase();
+    ok = hn.length > 2 && /^\d{6,18}$/.test(an) && /^[A-Za-z]{4}0[A-Za-z0-9]{6}$/.test(ifs);
+    if (!ok) { erEl.textContent = 'Enter valid bank details.'; return; }
+    dest = { method: 'bank', holder: hn, account: an, ifsc: ifs };
+  }
+  /* 6b: validation passed — show the destination-confirm sheet with the
+   * validated snapshot before anything is queued. */
+  confirmPayoutSheet(b, amt, dest, function () { submitPayout(b, amt, dest); });
 }
 function requestPayout() {
   var root = $('#s-earnings');
@@ -1684,5 +1867,214 @@ function loadPortfolio() {
   }).catch(function () {});
 }
 
+/* ================= Item 26 (Cycle 21): pre-booking "Ask a question" (creator) =
+ * Brands ask pre-booking questions from a creator's public profile view; the
+ * threads land here in a "Questions from brands" inbox card at the top of the
+ * Bookings screen (#cqq anchor in index.html — the creator's inbox area).
+ * Doc shape: { creatorId, brandId, brandName, creatorHandle,
+ *   messages: [{from:'brand'|'creator', text, at}], status:'open'|'closed',
+ *   createdAt, updatedAt }. The thread overlay mirrors the in-booking chat
+ * (#cc-chat) message patterns exactly. Fully separate from the booking state
+ * machine — no booking is created or touched. */
+
+var CQ_MAX_MSGS = 100; /* thread length cap — oldest messages are trimmed */
+var cqInboxUnsub = null, cqThreadId = null, cqThreadUnsub = null, cqBusy = false;
+
+function loadQuestionInbox() {
+  if (!uid) return;
+  if (cqInboxUnsub) { try { cqInboxUnsub(); } catch (e) {} cqInboxUnsub = null; }
+  try {
+    /* Single-field query (no composite index needed); sorted client-side. */
+    cqInboxUnsub = DB.collection('prebooking_questions').where('creatorId', '==', uid)
+      .onSnapshot(cqPaintInbox, function () {});
+    trackUnsub(cqInboxUnsub); /* released on logout by teardown() */
+  } catch (e) {}
+}
+
+function cqLastMsg(d) {
+  var msgs = (d && Array.isArray(d.messages)) ? d.messages : [];
+  return msgs.length ? msgs[msgs.length - 1] : null;
+}
+
+/* Inbox card: one row per thread with the brand name, last-message preview,
+ * recency and open/closed state. Hidden when there are no threads. */
+function cqPaintInbox(snap) {
+  var box = document.getElementById('cqq');
+  if (!box) return;
+  var arr = [];
+  snap.forEach(function (doc) { arr.push({ id: doc.id, d: doc.data() || {} }); });
+  arr.sort(function (a, b) {
+    var ta = a.d.updatedAt && a.d.updatedAt.toMillis ? a.d.updatedAt.toMillis() : 0;
+    var tb = b.d.updatedAt && b.d.updatedAt.toMillis ? b.d.updatedAt.toMillis() : 0;
+    return tb - ta;
+  });
+  if (!arr.length) { box.style.display = 'none'; box.innerHTML = ''; return; }
+  box.style.display = '';
+  box.innerHTML = '<div class="glass card" style="padding:14px 16px"><div style="display:flex;gap:10px;align-items:center">' +
+    '<div class="t3 teal" style="width:40px;height:40px"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="#send"/></svg></div>' +
+    '<div style="flex:1;min-width:0"><div style="font-size:16px;font-weight:800">Questions from brands</div>' +
+    '<div style="font-size:12.5px;color:#55616d">Pre-booking questions — reply fast to win the collab</div></div></div>' +
+    '<div style="display:flex;flex-direction:column;margin-top:6px">' +
+    arr.map(function (x) {
+      var last = cqLastMsg(x.d), prev = last ? String(last.text || '') : '';
+      if (prev.length > 80) prev = prev.slice(0, 80) + '…';
+      var open = x.d.status !== 'closed';
+      var ini = esc(String(x.d.brandName || 'B').trim().charAt(0).toUpperCase() || 'B');
+      return '<div class="cq-row" data-cq="' + esc(x.id) + '" role="button" tabindex="0" style="display:flex;gap:10px;align-items:center;padding:10px 2px;border-top:1px solid rgba(15,40,60,.08);cursor:pointer">' +
+        '<div class="t3 grn" style="width:38px;height:38px;flex:none;font-size:16px;font-weight:800;color:#fff">' + ini + '</div>' +
+        '<div style="flex:1;min-width:0"><div style="font-size:14.5px;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + esc(x.d.brandName || 'Brand') + '</div>' +
+        '<div style="font-size:12.5px;color:#55616d;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + (last ? esc((last.from === 'creator' ? 'You: ' : '') + prev) : 'No messages yet') + '</div></div>' +
+        '<div style="text-align:right;flex:none"><div style="font-size:11.5px;color:#55616d">' + esc(agoStr(x.d.updatedAt)) + '</div>' +
+        (open ? '<div style="font-size:11px;font-weight:800;color:#0e7490;margin-top:2px">OPEN</div>'
+              : '<div style="font-size:11px;font-weight:700;color:#98a2ad;margin-top:2px">CLOSED</div>') + '</div></div>';
+    }).join('') + '</div></div>';
+}
+
+/* Overlay CSS mirrors the in-booking chat (#cc-chat) exactly — same bubbles,
+ * same glass sheet, same input row. Injected once, on first thread open. */
+function cqEnsureCss() {
+  if (document.getElementById('cq-css')) return;
+  var st = document.createElement('style');
+  st.id = 'cq-css';
+  st.textContent = '#cq-chat{position:absolute;inset:0;z-index:60;display:none}' +
+    '#cq-chat.on{display:block}' +
+    '.cq-dim{position:absolute;inset:0;background:rgba(255,255,255,.55);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px)}' +
+    '.cq-box{position:absolute;left:8px;right:8px;bottom:8px;top:64px;border-radius:36px;display:flex;flex-direction:column;overflow:hidden;padding:14px 16px 16px}' +
+    '.cq-box>*{position:relative;z-index:1}' +
+    '.cq-head{display:flex;align-items:center;gap:10px;margin-bottom:8px}' +
+    '.cq-msgs{flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:8px;padding:6px 2px}' +
+    '.cq-inrow{display:flex;gap:8px;align-items:center;margin-top:8px}' +
+    '.cq-msg{max-width:84%;padding:10px 14px;font-size:14.5px;line-height:1.4;word-break:break-word;position:relative;z-index:1}' +
+    '.cq-msg.me{align-self:flex-end;color:#fff;background:linear-gradient(180deg,#3a3d44 0,#16181c 46%,#000 100%);box-shadow:0 0 0 1px rgba(255,255,255,.5),0 8px 14px -8px rgba(0,0,0,.5);border-radius:20px 20px 6px 20px}' +
+    '.cq-msg.them{align-self:flex-start;background:rgba(255,255,255,.85);box-shadow:0 0 0 1px rgba(15,40,60,.1);border-radius:20px 20px 20px 6px}' +
+    '.cq-msg small{display:block;font-size:11px;opacity:.65;margin-bottom:2px}';
+  document.head.appendChild(st);
+}
+
+/* Message bubbles mirror the in-booking chat (ccMsgHTML): own = black 3D,
+ * brand = glass with the brand name label. */
+function cqMsgHTML(m, brandName) {
+  var mine = m.from === 'creator';
+  return '<div class="cq-msg ' + (mine ? 'me' : 'them') + '">' +
+    (mine ? '' : '<small>' + esc(brandName || 'Brand') + '</small>') + escHtml(m.text) + '</div>';
+}
+
+function cqPaintThread(snap) {
+  var box = document.getElementById('cq-msgs');
+  if (!box) return;
+  var d = (snap && snap.exists) ? (snap.data() || {}) : null;
+  if (!d) { box.innerHTML = '<div class="hint" style="text-align:center">This thread is no longer available.</div>'; return; }
+  var arr = Array.isArray(d.messages) ? d.messages.slice() : [];
+  arr.sort(function (a, b) {
+    var ta = a.at && a.at.toMillis ? a.at.toMillis() : 0;
+    var tb = b.at && b.at.toMillis ? b.at.toMillis() : 0;
+    return ta - tb;
+  });
+  box.innerHTML = arr.length ? arr.map(function (m) { return cqMsgHTML(m, d.brandName); }).join('')
+    : '<div class="hint" style="text-align:center">No messages yet.</div>';
+  box.scrollTop = box.scrollHeight;
+  var closed = d.status === 'closed';
+  var ttl = document.getElementById('cq-title');
+  if (ttl) ttl.textContent = d.brandName || 'Brand';
+  var inp = document.getElementById('cq-in');
+  if (inp) inp.disabled = closed;
+  var sendb = document.getElementById('cq-send');
+  if (sendb) sendb.style.opacity = closed ? '.45' : '1';
+  var cb = document.getElementById('cq-close');
+  if (cb) cb.style.display = closed ? 'none' : '';
+}
+
+function cqCloseThread() {
+  var ov = document.getElementById('cq-chat');
+  if (ov) ov.classList.remove('on');
+  if (cqThreadUnsub) { try { cqThreadUnsub(); } catch (e) {} cqThreadUnsub = null; }
+  cqThreadId = null; cqBusy = false;
+}
+
+function cqOpenThread(threadId) {
+  if (!uid || !threadId) return;
+  cqCloseThread();
+  cqEnsureCss();
+  cqThreadId = String(threadId);
+  var root = document.getElementById('s-bookings');
+  if (!root) return;
+  var ov = document.getElementById('cq-chat');
+  if (!ov) {
+    ov = document.createElement('div');
+    ov.id = 'cq-chat';
+    ov.innerHTML = '<div class="cq-dim" id="cq-dim"></div>' +
+      '<div class="glass cq-box"><div class="cq-head">' +
+      '<div class="glass circ" id="cq-back" role="button" aria-label="Back" style="width:42px;height:42px;flex:none"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><use href="#back"/></svg></div>' +
+      '<div style="flex:1;min-width:0"><div style="font-size:17px;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" id="cq-title">Questions</div>' +
+      '<div style="font-size:12px;color:#55616d">Pre-booking question thread</div></div></div>' +
+      '<div class="cq-msgs" id="cq-msgs"></div>' +
+      '<div class="cq-inrow"><div class="f ft" style="flex:1"><input id="cq-in" placeholder="Type your reply..." maxlength="2000" autocomplete="off"></div>' +
+      '<button type="button" class="black" id="cq-send" style="width:50px;height:50px;border-radius:50%;flex:none;padding:0" aria-label="Send"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true" style="stroke:#fff;width:20px;height:20px"><use href="#send"/></svg></button></div>' +
+      '<button type="button" class="tag glass" id="cq-close" style="width:100%;height:44px;border-radius:22px;justify-content:center;font-size:14px;font-weight:700;border:0;margin-top:10px">Mark resolved</button></div>';
+    root.appendChild(ov);
+    var send = function () {
+      var inp = document.getElementById('cq-in');
+      if (!inp || inp.disabled || !cqThreadId || cqBusy) return;
+      var t = inp.value.trim();
+      if (!t) return;
+      inp.value = '';
+      cqBusy = true;
+      cqAppend(cqThreadId, t).then(function () { cqBusy = false; },
+        function () { cqBusy = false; toast('Message could not be sent.'); });
+    };
+    ov.querySelector('#cq-back').addEventListener('click', cqCloseThread);
+    ov.querySelector('#cq-dim').addEventListener('click', cqCloseThread);
+    ov.querySelector('#cq-send').addEventListener('click', send);
+    ov.querySelector('#cq-in').addEventListener('keydown', function (e) {
+      if (e.key === 'Enter') { e.preventDefault(); send(); }
+    });
+    ov.querySelector('#cq-close').addEventListener('click', function () {
+      if (!cqThreadId) return;
+      DB.collection('prebooking_questions').doc(cqThreadId)
+        .update({ status: 'closed', updatedAt: FB.serverStamp() })
+        .then(function () { toast('Thread marked resolved.'); })
+        .catch(function () { toast('Could not update the thread.'); });
+    });
+  }
+  ov.classList.add('on');
+  var msgs = document.getElementById('cq-msgs');
+  if (msgs) msgs.innerHTML = '<div class="hint" style="text-align:center">Loading messages…</div>';
+  if (cqThreadUnsub) { try { cqThreadUnsub(); } catch (e) {} }
+  cqThreadUnsub = DB.collection('prebooking_questions').doc(cqThreadId)
+    .onSnapshot(cqPaintThread, function () {});
+  var inp = document.getElementById('cq-in');
+  if (inp) setTimeout(function () { try { inp.focus(); } catch (e) {} }, 250);
+}
+
+/* Append-only reply write via transaction; trims the array to CQ_MAX_MSGS. */
+function cqAppend(threadId, text) {
+  text = String(text || '').slice(0, 2000).trim();
+  if (!text || !uid) return Promise.reject(new Error('bad_message'));
+  var ref = DB.collection('prebooking_questions').doc(String(threadId));
+  return DB.runTransaction(function (tx) {
+    return tx.get(ref).then(function (snap) {
+      if (!snap.exists) throw new Error('cq_gone');
+      var d = snap.data() || {};
+      if (d.status === 'closed') throw new Error('cq_closed');
+      if (String(d.creatorId) !== String(uid)) throw new Error('cq_denied');
+      var msgs = Array.isArray(d.messages) ? d.messages.slice() : [];
+      msgs.push({ from: 'creator', text: text, at: FB.serverStamp() });
+      if (msgs.length > CQ_MAX_MSGS) msgs = msgs.slice(-CQ_MAX_MSGS);
+      tx.update(ref, { messages: msgs, updatedAt: FB.serverStamp() });
+    });
+  });
+}
+
+/* Inbox row taps (delegated — rows are rendered dynamically by cqPaintInbox). */
+document.addEventListener('click', function (e) {
+  var r = e.target && e.target.closest ? e.target.closest('.cq-row') : null;
+  if (r && r.dataset.cq) cqOpenThread(r.dataset.cq);
+});
+document.addEventListener('keydown', function (e) {
+  if ((e.key === 'Enter' || e.key === ' ') && e.target && e.target.closest) {
+    var r = e.target.closest('.cq-row');
+    if (r && r.dataset.cq) { e.preventDefault(); cqOpenThread(r.dataset.cq); }
+  }
+});
 
 })();

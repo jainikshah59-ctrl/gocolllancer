@@ -15,11 +15,16 @@
  * 3. Reconcile paid-but-unbooked Cashfree orders → unclaimed_payments + admin notif
  * 4. Expire Business Pro subscriptions past their 30-day term.
  * 5. DPDP data deletion requests (deletionRequests, status pending) → erase
- *    profile/contact/tokens, anonymize financial rows (Item 7, Cycle 19).
+ *    profile/contact/tokens, anonymize financial rows (Item 7, Cycle 19;
+ *    coverage gaps closed: instagram_tokens, walletDeposits, referralCaps,
+ *    savedCreators, booking_messages, reviews + handle TOMBSTONE, Items 5/7;
+ *    blocked while money unsettled: wallet balance, pending/accumulating/
+ *    APPROVED payouts, Pending/Active/PendingCompletion/DISPUTED bookings,
+ *    Item 23).
  */
 import { getAdmin } from '../lib/firebaseAdmin.js';
-import { FieldValue } from 'firebase-admin/firestore';
-import { creatorShare, fyLabel, TDS_THRESHOLD_INR } from '../lib/pricing.js';
+import { FieldValue, FieldPath } from 'firebase-admin/firestore';
+import { creatorShare, refundableBookingTotal } from '../lib/pricing.js';
 
 export default async function handler(req, res) {
   // Auth (C6#1/C7#1): Vercel Cron sends `x-vercel-cron: 1` on scheduled
@@ -74,7 +79,8 @@ export default async function handler(req, res) {
         if (b.status !== 'Pending' || b.autoCancelled) return 'skip';
         // SERVER-TRUTH amount only: b.paidAmount was written by
         // api/booking-create.js; never trust a client-set refundAmount.
-        const amt = Number(b.paidAmount || 0);
+        // Item 12: refund the FULL amount the brand paid (paidAmount + upiMdr).
+        const amt = refundableBookingTotal(b);
         const bizRef = b.bizId ? db.collection('businesses').doc(b.bizId) : null;
         const bizSnap = bizRef ? await tx.get(bizRef) : null;
         let refunded = false;
@@ -97,7 +103,16 @@ export default async function handler(req, res) {
         tx.update(doc.ref, {
           status: 'Cancelled', autoCancelled: true,
           cancelReason: 'Creator did not accept within 72 hours (auto-cancelled)',
+          // Item 6 (this report): the auto-cancel IS a full refund to the
+          // brand (see header), so stamp the refund outcome explicitly —
+          // same shape as the §1b refund path (refundStatus:'completed',
+          // refundedAmount = actual refunded sum). When no money moved
+          // (barter / amt 0 / brand doc missing) the fields are 'none' / 0,
+          // and §1b picks the row up to mark refundProcessed on the same
+          // cron run.
           refundProcessed: refunded,
+          refundStatus: refunded ? 'completed' : 'none',
+          refundedAmount: refunded ? amt : 0,
           refundedAt: refunded ? now : null,
           updatedAt: now,
         });
@@ -112,7 +127,7 @@ export default async function handler(req, res) {
             await db.collection('bizNotifs').add({
               bizId: outcome.bizId, type: 'refund_issued',
               title: 'Booking auto-cancelled — refund issued',
-              body: 'The creator did not accept within 72 hours. Rs.' +
+              body: 'The creator did not accept within 72 hours. ₹' +
                 Number(outcome.amt || 0).toLocaleString('en-IN') +
                 ' was refunded to your Collancer wallet for booking ' + doc.id + '.',
               bookingId: doc.id, read: false, createdAt: FieldValue.serverTimestamp(),
@@ -127,9 +142,10 @@ export default async function handler(req, res) {
     // 1b. Finalize creator-reject + brand-cancel refunds (bookings cancelled
     // with a pending refund intent). Runs as admin; idempotent via refund_{id}.
     // KILL-FEE POLICY (Cycle 13+14+15): when the BRAND cancels an ACTIVE
-    // booking, the brand is refunded paidAmount - platformFee (Item 24) and
-    // the creator gets 10% of paidAmount as a kill-fee, paid out of the
-    // retained platform-fee portion (queued to payoutRequests/killfee_{id}
+    // booking, the brand is refunded the refundable total (paidAmount +
+    // upiMdr, Item 12/24) minus platformFee, and the creator gets 10% of
+    // the refundable total as a kill-fee, paid out of the retained
+    // platform-fee portion (queued to payoutRequests/killfee_{id}
     // for admin release). Active is detected via the client-recorded
     // statusBeforeCancel, with the client-attached refundAmount as backstop.
     // Pending cancels and creator rejects always get a full refund.
@@ -189,7 +205,8 @@ export default async function handler(req, res) {
         // SERVER-TRUTH amounts only: paidAmount/platformFee were written by
         // api/booking-create.js (or the legacy wallet flow). Never use the
         // client-set refundAmount field — it is only a hint.
-        const amt = Number(b.paidAmount || 0);
+        // Item 12: refund the FULL amount the brand paid (paidAmount + upiMdr).
+        const amt = refundableBookingTotal(b);
         const fee = Number(b.platformFee || 0);
         if (!(b.bizId && amt > 0 && !b.barter)) {
           // Nothing refundable — mark processed so we don't loop forever.
@@ -201,10 +218,11 @@ export default async function handler(req, res) {
         if (!bizSnap.exists) return 'skip'; // retry next run
 
         // Kill-fee decision (Cycle 13+14+15): brand cancelled an Active
-        // booking. Brand refund = paidAmount - platformFee; creator kill-fee
-        // = min(10% of paidAmount, platformFee) — always within the retained
-        // fee portion (fee is 12% of the discounted price, so 10% of the
-        // ~112% total ≈ 11.2% of the price < fee; the min() is a guard).
+        // booking. Brand refund = refundableTotal - platformFee; creator
+        // kill-fee = min(10% of refundableTotal, platformFee) — always
+        // within the retained fee portion (fee is 12% of the discounted
+        // price, so 10% of the ~112% total ≈ 11.2% of the price < fee;
+        // the min() is a guard). refundableTotal = paidAmount + upiMdr.
         // Transitional bookings without statusBeforeCancel but with the
         // Active-policy refundAmount attached are treated the same;
         // anything else gets a full refund (fail-safe, brand-favorable).
@@ -251,18 +269,12 @@ export default async function handler(req, res) {
             createdAt: now,
             note: 'Kill-fee (10% of paid amount): brand cancelled an Active booking',
           }, { merge: true });
-          // Item 10 (Cycle 19): kill-fee is creator income — count it toward
-          // the FY payout total for TDS tracking.
-          const cRef = db.collection('creators').doc(b.creatorId);
-          const cSnap = await tx.get(cRef);
-          const cData = cSnap.exists ? (cSnap.data() || {}) : {};
-          const fy = fyLabel(now);
-          const fyTotal = (cData.payoutFY === fy ? Number(cData.payoutFYTotal || 0) : 0) + killFee;
-          tx.set(cRef, {
-            payoutFY: fy, payoutFYTotal: fyTotal,
-            tdsApplicable: fyTotal >= TDS_THRESHOLD_INR,
-            updatedAt: now,
-          }, { merge: true });
+          // Item 25 (paid-time TDS, REVERSIBLE pending Jainik's CA advice on
+          // 194J vs 194O): kill-fee FY tracking moved from queue-time to
+          // paid-time. The kill_fee payoutRequest carries creatorId, so the
+          // payout-release txn in api/booking-action.js counts it when the
+          // money is actually released. No queue-time increment here —
+          // otherwise the fee would be double-counted.
         }
 
         const bookingPatch = {
@@ -285,7 +297,7 @@ export default async function handler(req, res) {
             await db.collection('bizNotifs').add({
               bizId: outcome.bizId, type: 'refund_issued',
               title: 'Refund issued',
-              body: 'Rs.' + Number(outcome.refundToBrand || 0).toLocaleString('en-IN') +
+              body: '₹' + Number(outcome.refundToBrand || 0).toLocaleString('en-IN') +
                 ' was refunded to your Collancer wallet for booking ' + doc.id + '.',
               bookingId: doc.id, read: false, createdAt: FieldValue.serverTimestamp(),
             });
@@ -298,7 +310,7 @@ export default async function handler(req, res) {
             await db.collection('creatorNotifs').add({
               creatorId: outcome.creatorId, type: 'kill_fee_queued',
               title: 'Kill-fee queued',
-              body: 'A brand cancelled an Active booking. Rs.' +
+              body: 'A brand cancelled an Active booking. ₹' +
                 Number(outcome.killFee).toLocaleString('en-IN') +
                 ' kill-fee has been queued to your payouts for booking ' + doc.id + '.',
               bookingId: doc.id, read: false, createdAt: FieldValue.serverTimestamp(),
@@ -347,7 +359,7 @@ export default async function handler(req, res) {
         // so a retried cron run can never queue a duplicate payout.
         // Item 3 (Cycle 16): canonical creator share via lib/pricing (95%,
         // exactly as the payoutRequests rule demands). Shares <= 0 are
-        // SKIPPED (no junk amount-0 rows). Sub-Rs.100 shares use the
+        // SKIPPED (no junk amount-0 rows). Sub-₹100 shares use the
         // 'accumulating' convention from /api/booking-action — small
         // creator earnings must never vanish; admin combines them with
         // future payouts.
@@ -363,21 +375,15 @@ export default async function handler(req, res) {
               amount: share, status: payoutStatus, createdAt: now,
               note: payoutStatus === 'pending'
                 ? 'Auto-approved booking payout'
-                : 'Auto-approved booking payout — share below the Rs.100 payout floor, accumulates with future payouts',
+                : 'Auto-approved booking payout — share below the ₹100 payout floor, accumulates with future payouts',
             }, { merge: true });
             payoutCreated = true;
-            // Item 10 (Cycle 19): TDS/194J — track per-creator FY payout
-            // totals. Same txn, so the total can never drift from the queue.
-            const cRef = db.collection('creators').doc(b.creatorId);
-            const cSnap = await tx.get(cRef);
-            const cData = cSnap.exists ? (cSnap.data() || {}) : {};
-            const fy = fyLabel(now);
-            const fyTotal = (cData.payoutFY === fy ? Number(cData.payoutFYTotal || 0) : 0) + share;
-            tx.set(cRef, {
-              payoutFY: fy, payoutFYTotal: fyTotal,
-              tdsApplicable: fyTotal >= TDS_THRESHOLD_INR,
-              updatedAt: now,
-            }, { merge: true });
+            // Item 25 (paid-time TDS, REVERSIBLE pending Jainik's CA advice on
+            // 194J vs 194O): FY tracking moved from queue-time to paid-time.
+            // This payoutRequest carries creatorId + amount, so the
+            // payout-release txn in api/booking-action.js counts it when the
+            // money is actually released. No queue-time increment here —
+            // otherwise the share would be double-counted.
           }
         }
         return { approved: true, payoutCreated, share, payoutStatus, creatorId: b.creatorId || null };
@@ -389,13 +395,13 @@ export default async function handler(req, res) {
         if (outcome.creatorId) {
           try {
             const shareTxt = Number(outcome.share || 0) > 0
-              ? ' Rs.' + Number(outcome.share).toLocaleString('en-IN') + ' has been queued to your payouts'
+              ? ' ₹' + Number(outcome.share).toLocaleString('en-IN') + ' has been queued to your payouts'
               : ' Your payout has been queued';
             await db.collection('creatorNotifs').add({
               creatorId: outcome.creatorId, type: 'booking_auto_approved',
               title: 'Booking auto-approved',
               body: 'The brand did not review in time, so the booking was auto-approved.' + shareTxt +
-                (outcome.payoutStatus === 'accumulating' ? ' (below the Rs.100 floor — it accumulates with your future payouts).' : '.'),
+                (outcome.payoutStatus === 'accumulating' ? ' (below the ₹100 floor — it accumulates with your future payouts).' : '.'),
               bookingId: doc.id, read: false, createdAt: FieldValue.serverTimestamp(),
             });
           } catch (e) {
@@ -416,13 +422,17 @@ export default async function handler(req, res) {
       }
     }
 
-    // 3. Reconcile paid-but-unbooked Cashfree orders (C7#16).
+    // 3. Reconcile paid-but-unbooked Cashfree orders (C7#16) + orphaned
+    // paid_no_registry rows (Item 7).
     // api/cashfree-order registers every order in payment_orders/{orderId} with
     // status 'created'. If the brand paid but the tab closed / booking-create
     // never ran, the order stays orphaned: money moved, no booking, nobody
     // notified. This sweep re-checks stale 'created' orders against Cashfree
     // (only those older than 1h, max 20/run), marks PAID ones
     // 'paid_unbooked', and flags them in unclaimed_payments + adminNotifs.
+    // §3b then sweeps paid_no_registry rows (webhook landed but the registry
+    // row was missing — money moved, never credited): re-verify PAID,
+    // bind/credit the brand wallet when possible, else flag + admin notif.
     const reconcile = { checked: 0, flagged: 0, abandoned: 0 };
     const cfAppId = process.env.CASHFREE_APP_ID;
     const cfSecret = process.env.CASHFREE_SECRET_KEY;
@@ -452,9 +462,12 @@ export default async function handler(req, res) {
         } catch { /* network blip — leave 'created', retry next run */ }
         if (status === 'PAID') {
           // Idempotent flag: deterministic unclaimed doc id, merge:true.
-          await db.runTransaction(async (tx) => {
+          // Item 28: the transaction is a no-op when another run already
+          // flipped the row (guard returns false) — the admin notification
+          // must be skipped then, or the same order notifies every run.
+          const didFlag = await db.runTransaction(async (tx) => {
             const cur = await tx.get(o.ref);
-            if (!cur.exists || cur.data().status !== 'created' || cur.data().bookingId) return;
+            if (!cur.exists || cur.data().status !== 'created' || cur.data().bookingId) return false;
             tx.update(o.ref, {
               status: 'paid_unbooked', reconciledAt: now, updatedAt: now,
             });
@@ -466,22 +479,211 @@ export default async function handler(req, res) {
               createdAt: FieldValue.serverTimestamp(),
               updatedAt: FieldValue.serverTimestamp(),
             }, { merge: true });
+            return true;
           });
-          await db.collection('adminNotifs').add({
-            type: 'unclaimed_payment',
-            title: 'Paid but unbooked payment',
-            body: 'Cashfree order ' + o.id + ' is PAID (' +
-              (od.uid || 'unknown brand') + ') but has no booking. Follow up with the brand.',
-            orderId: o.id, bizId: od.uid || null,
-            resolved: false, createdAt: now,
-          });
-          reconcile.flagged++;
+          if (didFlag) {
+            await db.collection('adminNotifs').add({
+              type: 'unclaimed_payment',
+              title: 'Paid but unbooked payment',
+              body: 'Cashfree order ' + o.id + ' is PAID (' +
+                (od.uid || 'unknown brand') + ') but has no booking. Follow up with the brand.',
+              orderId: o.id, bizId: od.uid || null,
+              resolved: false, createdAt: now,
+            });
+            reconcile.flagged++;
+          }
         } else if (status && status !== 'unknown') {
           // Never paid (ACTIVE/EXPIRED/etc.) — stop scanning it every run.
           await o.ref.update({ status: 'abandoned', reconciledAt: now, updatedAt: now });
           reconcile.abandoned++;
         }
       }
+
+      // 3b. Sweep paid_no_registry rows (Item 7). The webhook wrote these when
+      // PAYMENT_SUCCESS arrived for an order with NO registry row (the order
+      // predates the registry or was created out-of-band): status
+      // 'paid_no_registry', uid null. Money moved, never credited, and no
+      // brand notification was possible. For each row: re-verify PAID against
+      // Cashfree (server-truth), try to bind the order to a brand via
+      // Cashfree's customer_details.customer_id, and either credit the brand
+      // wallet (idempotent, deterministic ledger id) or flag it paid_unbooked
+      // + write an admin notification — never silent. Item 1 (this report):
+      // PURPOSE-AWARE: a row whose purpose is NOT a booking payment
+      // ('pro_subscription', 'wallet_topup', ...) is never wallet-credited;
+      // it flips to 'paid_no_registry_pro' / 'paid_no_registry_nonbooking'
+      // for admin review + admin notification instead. Each row is swept
+      // exactly once: the flip out of 'paid_no_registry' is guarded inside
+      // the transaction, so a concurrent/duplicate run cannot double-credit.
+      const pnr = { checked: 0, recovered: 0, flagged: 0, purposeReview: 0 };
+      try {
+        const pnrSnap = await db.collection('payment_orders')
+          .where('status', '==', 'paid_no_registry')
+          .limit(20)
+          .get();
+        for (const o of pnrSnap.docs) {
+          const od = o.data() || {};
+          if (od.status !== 'paid_no_registry' || od.bookingId) continue;
+          pnr.checked++;
+          let ostatus = 'unknown';
+          let custId = null;
+          let cfAmt = 0;
+          try {
+            const r = await fetch(cfBase + '/orders/' + encodeURIComponent(o.id), {
+              headers: {
+                'x-api-version': '2023-08-01',
+                'x-client-id': cfAppId,
+                'x-client-secret': cfSecret,
+              },
+            });
+            const oj = await r.json().catch(() => ({}));
+            ostatus = String(oj.order_status || 'unknown');
+            cfAmt = Number(oj.order_amount || 0);
+            const cd = (oj.customer_details && typeof oj.customer_details === 'object')
+              ? oj.customer_details : {};
+            custId = cd.customer_id ? String(cd.customer_id) : null;
+          } catch { /* network blip — leave the row, retry next run */ }
+          if (ostatus !== 'PAID') continue;
+          const amt = Number(od.amount || cfAmt || 0);
+          const bizSnap = custId ? await db.collection('businesses').doc(custId).get() : null;
+
+          // Item 1 (this report): PURPOSE-AWARE recovery. The wallet-credit
+          // path below is ONLY valid for genuine booking payments. A
+          // paid_no_registry row carrying a non-booking purpose
+          // ('pro_subscription', 'wallet_topup', anything else) must NEVER
+          // be wallet-credited: a Pro subscription is an entitlement, not
+          // wallet money. Mark it distinctly (swept exactly once — the flip
+          // out of 'paid_no_registry' is txn-guarded, same as every other
+          // path) and flag it for admin review instead.
+          const purpose = String(od.purpose || '').trim();
+          const isBookingPurpose = !purpose || purpose === 'booking_payment';
+          if (!isBookingPurpose) {
+            const proOrder = purpose === 'pro_subscription';
+            const newStatus = proOrder ? 'paid_no_registry_pro' : 'paid_no_registry_nonbooking';
+            // Item 28: only notify when the flip actually happened — a
+            // concurrent run may have swept this row first (no-op guard).
+            const didFlip = await db.runTransaction(async (tx) => {
+              const cur = await tx.get(o.ref);
+              if (!cur.exists || cur.data().status !== 'paid_no_registry' || cur.data().bookingId) return false;
+              tx.set(o.ref, {
+                status: newStatus, reconciledAt: now, updatedAt: now,
+              }, { merge: true });
+              tx.set(db.collection('unclaimed_payments').doc('unclaimed_' + o.id), {
+                orderId: o.id, bizId: custId || null, amount: amt,
+                reason: proOrder ? 'paid_pro_no_registry' : 'paid_nonbooking_no_registry',
+                purpose, cashfreeEnv: od.cashfreeEnv || cfEnv,
+                resolved: false, source: 'cron_reconcile',
+                createdAt: FieldValue.serverTimestamp(),
+                updatedAt: FieldValue.serverTimestamp(),
+              }, { merge: true });
+              return true;
+            });
+            if (!didFlip) continue;
+            try {
+              await db.collection('adminNotifs').add({
+                type: 'unclaimed_payment',
+                title: proOrder ? 'Pro payment without registry row — review' : 'Non-booking payment without registry row — review',
+                body: 'Cashfree order ' + o.id + ' is PAID (₹' +
+                  Number(amt).toLocaleString('en-IN') + ') with purpose "' + purpose +
+                  '" but has no registry row. ' +
+                  (proOrder
+                    ? 'Business Pro must be activated (or refunded) manually — NOT wallet-credited.'
+                    : 'Do NOT wallet-credit — resolve manually.'),
+                orderId: o.id, bizId: custId || null,
+                resolved: false, createdAt: now,
+              });
+            } catch (e) {
+              console.error('[booking-deadlines] adminNotif paid_no_registry_purpose', String(e && e.message || e).slice(0, 160));
+            }
+            pnr.purposeReview++;
+            continue;
+          }
+
+          const canCredit = bizSnap && bizSnap.exists && amt > 0 &&
+            (!od.purpose || od.purpose === 'booking_payment');
+          if (canCredit) {
+            // Bind + credit the brand wallet.
+            // Item 28: capture whether the transaction actually credited —
+            // a concurrent run may have flipped the row first (guard
+            // returns false → no-op), and the biz notification must be
+            // skipped then, or the brand is notified twice for one credit.
+            const didCredit = await db.runTransaction(async (tx) => {
+              const cur = await tx.get(o.ref);
+              if (!cur.exists || cur.data().status !== 'paid_no_registry' || cur.data().bookingId) return false;
+              tx.update(db.collection('businesses').doc(custId), {
+                walletBalance: FieldValue.increment(amt),
+              });
+              tx.set(db.collection('walletTransactions').doc('recover_' + o.id), {
+                bizId: custId, orderId: o.id, type: 'deposit', amount: amt,
+                cfPaymentId: od.cfPaymentId || null, createdAt: now,
+                note: 'Recovered orphaned payment (registry missing) — credited by cron',
+              }, { merge: true });
+              tx.set(o.ref, {
+                status: 'recovered_to_wallet', uid: custId, bizId: custId,
+                reconciledAt: now, updatedAt: now,
+              }, { merge: true });
+              tx.set(db.collection('unclaimed_payments').doc('unclaimed_' + o.id), {
+                resolved: true, resolvedAt: now, resolvedVia: 'cron_reconcile',
+                updatedAt: now,
+              }, { merge: true });
+              return true;
+            });
+            if (didCredit) {
+            try {
+              await db.collection('bizNotifs').add({
+                bizId: custId, type: 'payment_recovered',
+                title: 'Recovered payment credited',
+                body: 'A Cashfree payment of ₹' + Number(amt).toLocaleString('en-IN') +
+                  ' (order ' + o.id + ') that never reached your wallet has been credited.',
+                orderId: o.id, read: false, createdAt: FieldValue.serverTimestamp(),
+              });
+            } catch (e) {
+              console.error('[booking-deadlines] bizNotif payment_recovered', String(e && e.message || e).slice(0, 160));
+            }
+            pnr.recovered++;
+            }
+          } else {
+            // Cannot bind to a brand — flip to paid_unbooked (visible in the
+            // brand's recoverable list + admin tooling) and notify admin.
+            // Item 28: same no-op guard — skip the admin notification when
+            // the transaction wrote nothing (row already flipped).
+            const didFlag = await db.runTransaction(async (tx) => {
+              const cur = await tx.get(o.ref);
+              if (!cur.exists || cur.data().status !== 'paid_no_registry' || cur.data().bookingId) return false;
+              tx.set(o.ref, {
+                status: 'paid_unbooked', reconciledAt: now, updatedAt: now,
+              }, { merge: true });
+              tx.set(db.collection('unclaimed_payments').doc('unclaimed_' + o.id), {
+                orderId: o.id, bizId: custId || null, amount: amt,
+                reason: 'paid_unknown_order', cashfreeEnv: od.cashfreeEnv || cfEnv,
+                resolved: false, source: 'cron_reconcile',
+                createdAt: FieldValue.serverTimestamp(),
+                updatedAt: FieldValue.serverTimestamp(),
+              }, { merge: true });
+              return true;
+            });
+            if (didFlag) {
+            try {
+              await db.collection('adminNotifs').add({
+                type: 'unclaimed_payment',
+                title: 'Orphaned paid order (registry missing)',
+                body: 'Cashfree order ' + o.id + ' is PAID (₹' +
+                  Number(amt).toLocaleString('en-IN') + ') ' +
+                  (custId ? 'but customer ' + custId + ' has no business profile — match manually.'
+                          : 'with no customer binding and no registry row — match manually.'),
+                orderId: o.id, bizId: custId || null,
+                resolved: false, createdAt: now,
+              });
+            } catch (e) {
+              console.error('[booking-deadlines] adminNotif paid_no_registry', String(e && e.message || e).slice(0, 160));
+            }
+            pnr.flagged++;
+            }
+          }
+        }
+      } catch (e) {
+        console.error('[booking-deadlines] paid_no_registry sweep', String(e && e.message || e).slice(0, 160));
+      }
+      results.paidNoRegistry = pnr;
     }
     results.reconcile = reconcile;
 
@@ -529,7 +731,7 @@ export default async function handler(req, res) {
     }
     results.proExpired = proExpired;
 
-    // 5. DPDP data deletion requests (Item 7, Cycle 19).
+    // 5. DPDP data deletion requests (Item 7, Cycle 19; Items 5/23 — this report).
     // The ?legal=data-deletion UI queues requests in `deletionRequests`
     // { uid, email, status:'pending', createdAt }. This pass processes them:
     // erase profile/contact/tokens, anonymize financial rows (keep amounts
@@ -540,12 +742,19 @@ export default async function handler(req, res) {
     //   creators/{uid}                       -> DELETE (profile, contact, tokens)
     //   creators/{uid}/private/contact       -> DELETE (subcollection)
     //   businesses/{uid}                    -> DELETE (same uid may be a brand too)
-    //   creatorHandles/* (creatorId==uid)    -> DELETE (handle reservation)
+    //   instagram_tokens/{uid}              -> DELETE (Meta long-lived token)
+    //   creatorHandles/* (creatorId==uid)    -> TOMBSTONE (keep handle taken,
+    //                                            never hard-delete — Item 5g)
     //   bookings (creatorId/bizId==uid)      -> ANONYMIZE (keep amounts/status)
+    //   booking_messages (of those bookings)-> DELETE
+    //   reviews (creatorId/bizId==uid)       -> ANONYMIZE (keep stars, strip PII)
     //   creatorNotifs (creatorId==uid)       -> DELETE
     //   bizNotifs (bizId==uid)               -> DELETE
     //   walletTransactions (bizId==uid)      -> ANONYMIZE (keep amount/type)
-    //   payoutRequests (creatorId==uid)      -> ANONYMIZE (keep amount/status)
+    //   walletDeposits (bizId==uid)          -> ANONYMIZE (keep amount/status)
+    //   payoutRequests (creatorId/bizId==uid)-> ANONYMIZE (keep amount/status)
+    //   referralCaps/{uid}                  -> DELETE (referrer-side counters)
+    //   savedCreators/*/creators/{uid}      -> DELETE (dangling shortlist refs)
     //   deletionRequests/{reqId}             -> status:'completed'
     const deletion = { processed: [], skipped: [] };
     try {
@@ -578,10 +787,10 @@ export default async function handler(req, res) {
           const [bizSnap, paySnap, bookSnap] = await Promise.all([
             db.collection('businesses').doc(uid).get(),
             db.collection('payoutRequests').where('creatorId', '==', uid)
-              .where('status', 'in', ['pending', 'accumulating']).limit(1).get(),
+              .where('status', 'in', ['pending', 'accumulating', 'approved']).limit(1).get(),
             db.collection('bookings')
               .where('creatorId', '==', uid)
-              .where('status', 'in', ['Pending', 'Active', 'PendingCompletion']).limit(1).get(),
+              .where('status', 'in', ['Pending', 'Active', 'PendingCompletion', 'Disputed']).limit(1).get(),
           ]);
           const bizData = bizSnap.exists ? (bizSnap.data() || {}) : {};
           if (Number(bizData.walletBalance || 0) > 0) blocked = 'wallet_balance';
@@ -590,8 +799,42 @@ export default async function handler(req, res) {
           if (!blocked) {
             const bbSnap = await db.collection('bookings')
               .where('bizId', '==', uid)
-              .where('status', 'in', ['Pending', 'Active', 'PendingCompletion']).limit(1).get();
+              .where('status', 'in', ['Pending', 'Active', 'PendingCompletion', 'Disputed']).limit(1).get();
             if (!bbSnap.empty) blocked = 'active_bookings';
+          }
+          if (!blocked) {
+            // Item 10 (this report): pending refund intents are unsettled
+            // money. A Cancelled booking whose refund has not settled
+            // (refundRequested with refundProcessed !== true, or an
+            // explicit refundProcessed:false from §1/§1b pickup) must NOT
+            // be anonymized — the §1b refund sweep needs the original
+            // bizId/creatorId to credit the wallet / queue the kill-fee;
+            // anonymizing first would strand the refund. Settled refunds
+            // (refundProcessed:true) are NOT blockers — their preserved
+            // refund fields (refundRequested, refundStatus, refundedAmount,
+            // refundProcessed) pass this check.
+            // Single-field queries only (no composite index needed); the
+            // refund-intent filter is applied in code.
+            const [rcSnap, rbSnap] = await Promise.all([
+              db.collection('bookings').where('creatorId', '==', uid)
+                .where('status', '==', 'Cancelled').limit(50).get(),
+              db.collection('bookings').where('bizId', '==', uid)
+                .where('status', '==', 'Cancelled').limit(50).get(),
+            ]);
+            const seenRefundDocs = new Set();
+            const hasPendingRefund = [...rcSnap.docs, ...rbSnap.docs].some((d) => {
+              if (seenRefundDocs.has(d.id)) return false;
+              seenRefundDocs.add(d.id);
+              const b = d.data() || {};
+              // Unsettled = the §1b refund sweep would still act on it
+              // (it skips only refundProcessed === true). A settled refund
+              // (refundProcessed:true) is NOT pending even if
+              // refundRequested is still attached — its preserved fields
+              // pass this check.
+              return b.refundProcessed !== true &&
+                (b.refundRequested === true || b.refundProcessed === false);
+            });
+            if (hasPendingRefund) blocked = 'pending_refunds';
           }
         } catch (e) {
           // If the safety check itself fails, do NOT delete (fail-closed).
@@ -617,17 +860,26 @@ export default async function handler(req, res) {
         }
 
         // Execute deletion in batches (500 writes/batch limit).
+        // Item 9e (Cycle 22, DPDP): Firestore rules cannot delete the
+        // Firebase Auth user — rules only govern Firestore data. The Auth
+        // identity is erased in step 14 below via the Admin SDK
+        // (app.auth().deleteUser(uid)); otherwise the account would stay
+        // sign-in-able after its data is gone.
         const BATCH = 400;
         let batch = db.batch();
         let ops = 0;
         const flush = async () => { if (ops > 0) { await batch.commit(); batch = db.batch(); ops = 0; } };
         const del = (ref) => { batch.delete(ref); ops++; };
         const upd = (ref, data) => { batch.update(ref, data); ops++; };
+        const tset = (ref, data) => { batch.set(ref, data, { merge: true }); ops++; };
         const maybeFlush = async () => { if (ops >= BATCH) await flush(); };
 
-        // 1. Creator + business profile docs + private contact subcollection.
+        // 1. Creator + business profile docs + private contact subcollection
+        // + Instagram OAuth tokens (Meta long-lived tokens must not survive
+        // "full" deletion — Item 5a).
         del(db.collection('creators').doc(uid));
         del(db.collection('businesses').doc(uid));
+        del(db.collection('instagram_tokens').doc(uid));
         try {
           const contactSnap = await db.collection('creators').doc(uid).collection('private').get();
           for (const d of contactSnap.docs) { del(d.ref); await maybeFlush(); }
@@ -637,10 +889,20 @@ export default async function handler(req, res) {
           for (const d of bContactSnap.docs) { del(d.ref); await maybeFlush(); }
         } catch (e) {}
 
-        // 2. Handle reservations.
+        // 2. Handle reservations — TOMBSTONE, never hard-delete (Item 5g).
+        // The doc id IS the handle: keeping a tombstone keeps the handle
+        // un-registerable, so nobody can squat/impersonate it after deletion.
+        // Handle-availability checks treat ANY existing doc (including
+        // tombstoned ones) as taken — there is no such check in this file.
         try {
           const hSnap = await db.collection('creatorHandles').where('creatorId', '==', uid).get();
-          for (const d of hSnap.docs) { del(d.ref); await maybeFlush(); }
+          for (const d of hSnap.docs) {
+            tset(d.ref, {
+              creatorId: 'deleted', deleted: true, deletedAt: now,
+              deletedPII: true, updatedAt: now,
+            });
+            await maybeFlush();
+          }
         } catch (e) {}
 
         // 3. Notifications.
@@ -652,10 +914,20 @@ export default async function handler(req, res) {
         }
 
         // 4. Bookings — ANONYMIZE (financial rows retained for tax/audit).
+        // Collect the booking ids too — §8 deletes their messages.
+        // Item 10 (this report): pending refund intent fields
+        // (refundRequested, refundStatus, refundedAmount, refundProcessed,
+        // and any pending-refund markers) are INTENTIONALLY PRESERVED —
+        // this update() merges, so it only touches the PII field and never
+        // wipes refund fields. They ride through on the anonymized record;
+        // only unsettled intents are blocked earlier at the safety check,
+        // so a settled refund's fields never trip it.
+        const bookingIds = [];
         for (const field of ['creatorId', 'bizId']) {
           try {
             const bSnap = await db.collection('bookings').where(field, '==', uid).limit(200).get();
             for (const d of bSnap.docs) {
+              bookingIds.push(d.ref.id);
               upd(d.ref, {
                 [field]: 'deleted',
                 deletedPII: true, updatedAt: now,
@@ -666,22 +938,35 @@ export default async function handler(req, res) {
         }
 
         // 5. Wallet transactions — ANONYMIZE (keep amount/type for ledger).
-        try {
-          const wSnap = await db.collection('walletTransactions').where('bizId', '==', uid).limit(200).get();
-          for (const d of wSnap.docs) {
-            upd(d.ref, { bizId: 'deleted', note: '[deleted]', deletedPII: true, updatedAt: now });
-            await maybeFlush();
-          }
-        } catch (e) {}
+        // Sweeps BOTH keyings: brand-side rows (bizId) and creator-side rows
+        // (creatorId) — the creator-keyed sweep was missing (Item 9 fix).
+        for (const field of ['bizId', 'creatorId']) {
+          try {
+            const wSnap = await db.collection('walletTransactions').where(field, '==', uid).limit(200).get();
+            for (const d of wSnap.docs) {
+              upd(d.ref, { [field]: 'deleted', note: '[deleted]', deletedPII: true, updatedAt: now });
+              await maybeFlush();
+            }
+          } catch (e) {}
+        }
 
         // 6. Payout requests — ANONYMIZE (keep amount/status for audit).
+        // Item 9 fix: payout destination PII (method/upi/holder/account/ifsc/
+        // destination) is STRIPPED via FieldValue.delete() — the previous
+        // version only blanked the ids and left the VPA/bank details intact.
+        const stripPayoutPII = (u, dd) => {
+          for (const k of ['method', 'upi', 'holder', 'account', 'ifsc', 'destination']) {
+            if (dd[k] !== undefined && dd[k] !== null && dd[k] !== '') u[k] = FieldValue.delete();
+          }
+          return u;
+        };
         try {
           const pSnap = await db.collection('payoutRequests').where('creatorId', '==', uid).limit(200).get();
           for (const d of pSnap.docs) {
-            upd(d.ref, {
+            upd(d.ref, stripPayoutPII({
               creatorId: 'deleted', bizId: 'deleted',
               note: '[deleted]', deletedPII: true, updatedAt: now,
-            });
+            }, d.data() || {}));
             await maybeFlush();
           }
         } catch (e) {}
@@ -693,7 +978,107 @@ export default async function handler(req, res) {
           }
         } catch (e) {}
 
+        // 7. Wallet deposits — ANONYMIZE (financial rows retained for audit).
+        // Manual-UPI deposit docs can carry payer PII (payer id / UTR / name);
+        // strip those while keeping amount/status for the ledger.
+        try {
+          const depSnap = await db.collection('walletDeposits').where('bizId', '==', uid).limit(200).get();
+          for (const d of depSnap.docs) {
+            const dd = d.data() || {};
+            const u = { bizId: 'deleted', deletedPII: true, updatedAt: now };
+            for (const k of ['payerName', 'payerId', 'upiId', 'upiRef', 'utr', 'payerUtr', 'note', 'email', 'phone', 'name']) {
+              if (dd[k] !== undefined && dd[k] !== null) u[k] = FieldValue.delete();
+            }
+            upd(d.ref, u);
+            await maybeFlush();
+          }
+        } catch (e) {}
+
+        // 8. Booking messages — DELETE (chat for the user's bookings).
+        try {
+          const seenMsg = new Set();
+          for (const bid of bookingIds) {
+            if (seenMsg.has(bid)) continue;
+            seenMsg.add(bid);
+            const mSnap = await db.collection('booking_messages').where('bookingId', '==', bid).limit(200).get();
+            for (const d of mSnap.docs) { del(d.ref); await maybeFlush(); }
+          }
+        } catch (e) {}
+
+        // 9. Reviews — ANONYMIZE (aggregate integrity: keep stars + bookingId;
+        // strip PII: ids, brand name, review text).
+        for (const field of ['creatorId', 'bizId']) {
+          try {
+            const rSnap = await db.collection('reviews').where(field, '==', uid).limit(200).get();
+            for (const d of rSnap.docs) {
+              upd(d.ref, {
+                [field]: 'deleted', bizName: 'Deleted', text: '[deleted]',
+                deletedPII: true, updatedAt: now,
+              });
+              await maybeFlush();
+            }
+          } catch (e) {}
+        }
+
+        // 10. Referral caps — DELETE (referrer-side monthly counters).
+        try { del(db.collection('referralCaps').doc(uid)); } catch (e) {}
+
+        // 11. Saved-creator shortlists — DELETE dangling references where
+        // other users saved this creator (savedCreators/{bizUid}/creators/{uid}).
+        try {
+          const sSnap = await db.collectionGroup('creators')
+            .where(FieldPath.documentId(), '==', uid).get();
+          for (const d of sSnap.docs) { del(d.ref); await maybeFlush(); }
+        } catch (e) {}
+
+        // 12. Pre-booking question threads — ANONYMIZE the deleter's side
+        // (Item 9 fix: previously zero §5 coverage). Thread docs are shared
+        // brand<->creator, so only the requesting party's PII is stripped:
+        // brand-side (brandId/brandName) or creator-side (creatorId/
+        // creatorHandle). The thread itself survives for the other party.
+        for (const field of ['brandId', 'creatorId']) {
+          try {
+            const qSnap = await db.collection('prebooking_questions').where(field, '==', uid).limit(200).get();
+            for (const d of qSnap.docs) {
+              const u = { [field]: 'deleted', deletedPII: true, updatedAt: now };
+              if (field === 'brandId') u.brandName = 'Deleted';
+              else u.creatorHandle = 'deleted';
+              upd(d.ref, u);
+              await maybeFlush();
+            }
+          } catch (e) {}
+        }
+
+        // 13. Payment orders — ANONYMIZE (Item 9 fix: previously zero §5
+        // coverage). Docs are keyed by orderId and carry uid (+creatorId on
+        // booking orders) and customerEmail. Strip the email, blank the ids;
+        // keep amount/purpose/status for the financial audit trail.
+        for (const field of ['uid', 'creatorId']) {
+          try {
+            const oSnap = await db.collection('payment_orders').where(field, '==', uid).limit(200).get();
+            for (const d of oSnap.docs) {
+              const od = d.data() || {};
+              const u = { [field]: 'deleted', deletedPII: true, updatedAt: now };
+              if (od.customerEmail !== undefined && od.customerEmail !== null) {
+                u.customerEmail = FieldValue.delete();
+              }
+              upd(d.ref, u);
+              await maybeFlush();
+            }
+          } catch (e) {}
+        }
+
         await flush();
+
+        // 14. Firebase Auth identity — DELETE via Admin SDK (Item 9e).
+        // Firestore rules cannot touch the Auth user; without this the
+        // account stays sign-in-able after its data is gone. Best-effort:
+        // a missing user (already deleted) must not fail the pass.
+        try {
+          await app.auth().deleteUser(uid);
+        } catch (e) {
+          console.error('[booking-deadlines] auth deleteUser', String(e && e.message || e).slice(0, 120));
+        }
 
         // 7. Mark the request completed.
         await reqDoc.ref.update({

@@ -116,6 +116,18 @@ service cloud.firestore {
       allow delete: if false;
     }
 
+    /* ---------------- creator private TDS tracking (SENTINEL-287) ----------------
+       FY payout counters (payoutFY, payoutFYTotal, tdsApplicable,
+       tdsTracking) written ONLY by the server (Admin SDK) at payout
+       release. They must never live on the world-readable public
+       creators/{id} doc — that would expose every creator's FY earnings.
+       The owner + admins may read; clients can never write. */
+
+    match /creators/{id}/private/tdsTracking {
+      allow get: if isOwner(id) || isAdmin();
+      allow create, update, delete: if false;
+    }
+
     /* ---------------- instagram_tokens (server-only via Admin SDK) ----------------
        Long-lived Instagram tokens. Never readable/writable by clients —
        the OAuth callback + refresh endpoints use the Admin SDK (bypasses rules). */
@@ -253,7 +265,27 @@ service cloud.firestore {
         && (!('paymentStatus' in d) || d.paymentStatus == 'not_required')
         && (!('escrowStatus' in d) || d.escrowStatus == 'not_required')
         && (!('paymentReference' in d) || d.paymentReference == null)
-        && (!('refundAmount' in d) || d.refundAmount == 0);
+        && (!('refundAmount' in d) || d.refundAmount == 0)
+        // Item 3 (Cycle 21, RULES): break the payout-rule circularity.
+        // The 95% payout check (payoutBookingData) reads creatorPrice from
+        // the booking doc, so a forged client-created booking with an
+        // inflated creatorPrice passed that check. Client-created docs must
+        // carry no pricing of their own: every money/pricing field is
+        // absent-or-zero, and type is forced to barter-or-absent (paid
+        // bookings are written only by /api/booking-create via the Admin
+        // SDK, which bypasses these rules). demoPayment is never
+        // client-writable on create.
+        && (!('creatorPrice' in d) || d.creatorPrice == 0)
+        && (!('amount' in d) || d.amount == 0)
+        && (!('escrowAmount' in d) || d.escrowAmount == 0)
+        && (!('platformFee' in d) || d.platformFee == 0)
+        && (!('proDiscount' in d) || d.proDiscount == 0)
+        && (!('type' in d) || d.type == 'barter')
+        && (!('demoPayment' in d) || d.demoPayment == false)
+        // BREAKER Cycle 35: upiMdr must also be absent-or-0 on client create.
+        // Refund paths credit paidAmount + upiMdr, so an unconstrained upiMdr
+        // on a client-written doc is a direct money-forge vector.
+        && (!('upiMdr' in d) || d.upiMdr == 0);
     }
 
     /* ------------------------------------------------------------------
@@ -432,7 +464,16 @@ service cloud.firestore {
       allow update, delete: if false; // append-only ledger
     }
 
-    /* ---------------- payouts ---------------- */
+    /* ---------------- payouts ----------------
+       Item 9a (Cycle 22, DPDP): payout destination PII (upi / holder /
+       account / ifsc) lives ON the payoutRequests doc itself, so it inherits
+       this read scope: the owning creator + admins ONLY. Brands — including
+       a brand that queued the payout for its own completed booking — and all
+       other creators are denied. There is no separate /payouts collection
+       and no creator-ledger collection (creator earnings rows are these
+       payoutRequests docs; the brand-side ledger is walletTransactions,
+       bizId-scoped, and adminRevenue is admin-only) — so no other read path
+       can leak payout destinations. */
 
     // Canonical creator earnings for a payout booking (95% of creatorPrice).
     // Fails closed: missing booking doc or missing creatorPrice denies.
@@ -491,6 +532,18 @@ service cloud.firestore {
           // fields server-side (client checks are bypassable).
           && validPayoutDest(request.resource.data));
       allow delete: if false;
+    }
+
+    /* Item 9c (Cycle 22, DPDP) — payment_orders (Cashfree order registry).
+     * Written server-side only (api/cashfree-order.js, api/cashfree-webhook.js
+     * and the booking-deadlines reconcile via the Admin SDK, which bypasses
+     * rules). The doc carries the payer's uid plus customerEmail, so reads
+     * are scoped to the owning uid + admins — never other users. No client
+     * code reads this collection today; client writes stay denied. */
+    match /payment_orders/{id} {
+      allow read: if isAdmin()
+        || (isAuthed() && resource.data.uid == request.auth.uid);
+      allow create, update, delete: if false; // server-only via Admin SDK
     }
 
     /* ---------------- verification ---------------- */
@@ -707,6 +760,17 @@ service cloud.firestore {
       allow delete: if false;
     }
 
+    /* ---------------- referral monthly caps (server-only counters) ----------------
+       Cycle 21 (RULES+REFERRAL): `referralCaps/{referrerUid}` is written by
+       lib/referral.js via Admin SDK only. The owner gets read access so the
+       Invite & Earn screen can show an honest "N/20 this month" counter.
+       Nothing else is widened: writes stay server-only (default deny). */
+    match /referralCaps/{uid} {
+      allow get: if isOwner(uid) || isAdmin();
+      allow list: if isAdmin();
+      allow create, update, delete: if false;
+    }
+
     /* ---------------- admin revenue ledger ---------------- */
 
     match /adminRevenue/{id} {
@@ -737,12 +801,161 @@ service cloud.firestore {
     /* ---------------- data deletion requests (DPDP Act, 2023) ---------------- */
     // Item 14 (DESI, Cycle 18): users queue their own deletion request;
     // only admins can read/process them.
+    // Item 9e (Cycle 22, DPDP): Firestore rules CANNOT delete the Firebase
+    // Auth user itself — rules only govern Firestore data. Erasing the Auth
+    // identity (admin.auth().deleteUser(uid)) must run server-side via the
+    // Admin SDK inside the same deletion pass that wipes the Firestore data
+    // (see the DPDP section in api/booking-deadlines.js); otherwise the
+    // account stays sign-in-able after its data is gone.
     match /deletionRequests/{id} {
       allow read: if isAdmin();
       allow create: if isAuthed()
         && request.resource.data.uid == request.auth.uid
         && request.resource.data.status == 'pending';
       allow update, delete: if isAdmin();
+    }
+
+    /* ---------------- pre-booking questions (Item 26, Cycle 21) ----------------
+     * Lightweight WhatsApp-style Q&A threads between a brand and a creator,
+     * BEFORE any booking exists. Doc shape:
+     * { creatorId, brandId, brandName, creatorHandle,
+     *   messages: [{from:'brand'|'creator', text, at}], status:'open'|'closed',
+     *   createdAt, updatedAt }. Messages stay as an array on the doc (max 100).
+     * Any authed brand can open a thread for any creator; only the two
+     * participants can read/reply; either side can close. No booking required
+     * — fully separate from the booking state machine. */
+    function pqParticipant() {
+      return isAuthed() && (resource.data.brandId == request.auth.uid
+        || resource.data.creatorId == request.auth.uid);
+    }
+
+    function pqValidMessage(m) {
+      return m is map
+        && m.from in ['brand', 'creator']
+        && m.text is string && m.text.size() > 0 && m.text.size() <= 2000;
+    }
+
+    /* Item 3 (Cycle 22, RULES) — pre-booking question hardening.
+     * (a) Sender spoofing: every message's `from` must match the writer's
+     * verified side. pqIsBrand/pqIsCreator prove the role by document
+     * existence (get()/exists() in rules are evaluated server-side and are
+     * not subject to the collections' own read rules, so this works even
+     * though businesses docs are owner+admin read-scoped).
+     * (b) Thread spam: exactly one message may be appended per update
+     * (pqAppendOne), except the client's legitimate oldest-first trim when
+     * the 100-message cap is hit; creates pin createdAt == request.time so
+     * timestamps can't be forged. A cross-document rate cap (e.g. the
+     * client's 10-open-threads-per-brand check in aqCreate) is NOT
+     * expressible in security rules — rules cannot count other documents —
+     * so that cap stays client-side, with brandId pinned to the caller (a
+     * brand can only ever inflate its own count).
+     * (c) Brand-name phishing: on create, brandName must equal
+     * businesses/{brandId}.bizName — but ONLY when that doc exists with a
+     * non-empty bizName, so brands still onboarding are never locked out. */
+    function pqIsBrand(uid) {
+      return exists(/databases/$(database)/documents/businesses/$(uid));
+    }
+
+    function pqIsCreator(uid) {
+      return exists(/databases/$(database)/documents/creators/$(uid));
+    }
+
+    function pqBrandNameOk(brandId, brandName) {
+      let p = /databases/$(database)/documents/businesses/$(brandId);
+      return !exists(p)
+        || !(get(p).data.get('bizName', '') is string
+          && get(p).data.get('bizName', '').size() > 0)
+        || brandName == get(p).data.get('bizName', '');
+    }
+
+    // True when the update appends exactly one reply — or performs the
+    // client's legitimate oldest-first trim once the 100-message cap is
+    // hit. Metadata-only updates (e.g. closing the thread) leave the array
+    // untouched and pass trivially.
+    function pqAppendOne() {
+      let oldSize = resource.data.messages.size();
+      let newSize = request.resource.data.messages.size();
+      return request.resource.data.messages == resource.data.messages
+        || newSize == oldSize + 1
+        || (oldSize >= 100 && newSize == 100);
+    }
+
+    // The newly appended reply's `from` must be the caller's own side.
+    // Skipped for metadata-only updates (close thread) where no new message
+    // exists — otherwise a brand closing after a creator's reply (or vice
+    // versa) would be wrongly denied.
+    function pqReplySenderOk() {
+      let msgs = request.resource.data.messages;
+      let last = msgs[msgs.size() - 1];
+      return msgs == resource.data.messages
+        || (request.auth.uid == resource.data.brandId && last.from == 'brand')
+        || (request.auth.uid == resource.data.creatorId && last.from == 'creator');
+    }
+
+    match /prebooking_questions/{id} {
+      allow read: if isAdmin() || pqParticipant();
+      // Item 3 (Cycle 22): sender-spoofing + brand-name-phishing hardening.
+      // The opener must be a verified participant whose role matches the
+      // claimed side, and every message on the create must carry that
+      // side's `from`. Client reality (verified in connect/brand-connect.js
+      // aqCreate and connect/creator-connect.js cqAppend): only brands open
+      // threads, with exactly 1 message ({from:'brand',...}); creators only
+      // ever reply. The creator-opens path is allowed with mirrored
+      // constraints (no client flow uses it today).
+      allow create: if isAuthed()
+        && request.resource.data.brandName is string
+        && request.resource.data.brandName.size() > 0
+        && request.resource.data.brandName.size() <= 120
+        && request.resource.data.creatorHandle is string
+        && request.resource.data.creatorHandle.size() <= 60
+        && request.resource.data.status == 'open'
+        && request.resource.data.messages is list
+        && request.resource.data.messages.size() >= 1
+        && request.resource.data.messages.size() <= 100
+        && pqValidMessage(request.resource.data.messages[request.resource.data.messages.size() - 1])
+        // Item 3b: the client stamps createdAt with a server timestamp —
+        // pin it to request.time so backdated/forged timestamps are denied.
+        && request.resource.data.createdAt == request.time
+        && (
+          // brand opens the thread (the only client flow today)
+          (request.resource.data.brandId == request.auth.uid
+            && pqIsBrand(request.auth.uid)
+            && request.resource.data.creatorId is string
+            && request.resource.data.creatorId.size() > 0
+            && request.resource.data.messages[0].from == 'brand'
+            && request.resource.data.messages[request.resource.data.messages.size() - 1].from == 'brand'
+            // Item 3c: brandName must match businesses/{brandId}.bizName
+            // (only when that doc exists with a non-empty bizName).
+            && pqBrandNameOk(request.auth.uid, request.resource.data.brandName))
+          // creator opens the thread (no client flow today; mirrored, strict)
+          || (request.resource.data.creatorId == request.auth.uid
+            && pqIsCreator(request.auth.uid)
+            && request.resource.data.brandId is string
+            && request.resource.data.brandId.size() > 0
+            && request.resource.data.messages[0].from == 'creator'
+            && request.resource.data.messages[request.resource.data.messages.size() - 1].from == 'creator'
+            && pqBrandNameOk(request.resource.data.brandId, request.resource.data.brandName)));
+      // Item 3 (Cycle 22): reply hardening — exactly one message per update
+      // (pqAppendOne), the appended reply's `from` must be the caller's own
+      // side (pqReplySenderOk), and the display names are immutable so a
+      // participant can't rebrand the thread into a phishing lure later.
+      allow update: if isAdmin() || (pqParticipant()
+        // participants are immutable
+        && request.resource.data.brandId == resource.data.brandId
+        && request.resource.data.creatorId == resource.data.creatorId
+        // Item 3c: display names pinned — brandName/creatorHandle are set
+        // (truthfully, vs businesses.bizName) at create time only
+        && request.resource.data.brandName == resource.data.brandName
+        && request.resource.data.creatorHandle == resource.data.creatorHandle
+        && request.resource.data.status in ['open', 'closed']
+        && request.resource.data.messages is list
+        && request.resource.data.messages.size() <= 100
+        // append-only: exactly one reply per update (or the client's
+        // oldest-first trim at the 100 cap); history can't be rewritten
+        && pqAppendOne()
+        && pqValidMessage(request.resource.data.messages[request.resource.data.messages.size() - 1])
+        && pqReplySenderOk());
+      allow delete: if false;
     }
 
     /* ---------------- default deny ---------------- */

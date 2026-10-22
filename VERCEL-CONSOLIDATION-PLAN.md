@@ -1,8 +1,12 @@
 # Vercel Function Consolidation Plan (Item 19, Cycle 17)
 
 **Status:** PROPOSAL ONLY — not implemented. Awaiting Jainik's approval.
+**State update (2026-10-16, uncommitted):** `api/payout-release.js` has since
+been merged into `api/booking-action.js` (independently of the merges proposed
+below), so the table's row 12 is historical — `api/` is now **11/12** with one
+slot of headroom. The proposed merges below remain valid future options.
 
-## Current State: 11/12 Hobby Functions Used
+## Current State: 11/12 Hobby Functions Used (one slot headroom)
 
 | # | File | Lines | Purpose | Called By |
 |---|------|-------|---------|-----------|
@@ -17,12 +21,15 @@
 | 9 | `booking-create.js` | 292 | Cashfree-funded booking | Brand card/UPI pay |
 | 10 | `cashfree-webhook.js` | 344 | Cashfree webhook handler | Cashfree servers |
 | 11 | `booking-deadlines.js` | 478 | Daily cron (refunds/payouts/expiry) | Vercel cron |
+| 12 | ~~`payout-release.js`~~ *(merged into `booking-action.js` — slot freed; now 11/12)* | — | Admin payout release ("Mark paid") — now `action: 'payout-release'` inside `booking-action.js` | Admin payout queue |
 
-**Problem:** Only 1 slot remains. CIRCUIT identified a need for `/api/instagram-refresh`
-(already added, using slot 11). Future needs (e.g., `/api/og` for per-profile share
-images, `/api/health` for monitoring) have no room.
+**Problem (resolved 2026-10-16):** the plan was written at the 12/12 Hobby cap
+(CIRCUIT's `/api/instagram-refresh` used slot 11; Cycle 19's `api/payout-release`
+used slot 12). The payout-release merge has since freed one slot — `api/` is
+now 11/12, so a single future endpoint can land without merging first. The
+merges below remain optional headroom-creating options.
 
-## Proposed Merges (saves 4 slots: 11 → 7)
+## Proposed Merges (saves 5 slots: 12 → 7)
 
 ### Merge A: Instagram trio → `api/instagram.js` (saves 2 slots)
 - Combine: `instagram-start.js` (57) + `instagram-callback.js` (231) + `instagram-refresh.js` (188)

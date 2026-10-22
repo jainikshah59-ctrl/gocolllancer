@@ -9,7 +9,7 @@
  * Steps:
  *  (a) verifyIdToken -> uid (booking.bizId is forced to uid)
  *  (a2) creatorPrice must match one of the creator's listed package prices
- *       (creators/{creatorId}.prices), tolerance <= Rs.1 — last
+ *       (creators/{creatorId}.prices), tolerance <= ₹1 — last
  *       client-controlled pricing input; rejects underpayment of the creator
  *  (b) fetch Cashfree order -> require order_status === 'PAID'
  *  (c) server-compute expected total from booking.creatorPrice:
@@ -18,6 +18,8 @@
  *      price. Reject if |order_amount - expectedTotal| > 1, where the
  *      expected total also tolerates the UPI MDR line (Item 2, Cycle 19):
  *      the order may equal expectedTotal OR expectedTotal + upiMdrCharge.
+ *      The MDR line actually charged is stored as booking.upiMdr (Item 12)
+ *      so refunds return paidAmount + upiMdr, not just the pre-MDR total.
  *  (d) order registry payment_orders/{orderId}: 409 REUSE only if the row
  *      was already consumed for a booking ('booked'/'consumed' or it carries
  *      a bookingId). /api/cashfree-order pre-registers every order with
@@ -27,7 +29,7 @@
  */
 import { getAdmin, verifyUid, readBody } from '../lib/firebaseAdmin.js';
 import { FieldValue } from 'firebase-admin/firestore';
-import { isProActiveBiz, upiMdrCharge } from '../lib/pricing.js';
+import { isProActiveBiz, upiMdrCharge, MIN_ORDER_INR, PRO_DISCOUNT_CAP_INR } from '../lib/pricing.js';
 import { resolveRebookId } from '../lib/rebook.js';
 
 const CF_API_VERSION = '2023-08-01';
@@ -87,7 +89,7 @@ export default async function handler(req, res) {
   // The creator's rate card lives in creators/{creatorId}.prices (object
   // label -> price, the same source the brand discovery UI builds its
   // package list from); `packages` (array) is checked as a fallback.
-  // A creatorPrice must match one listed price within Rs.1 (rounding).
+  // A creatorPrice must match one listed price within ₹1 (rounding).
   {
     const db0 = getAdmin().firestore();
     let creatorSnap = null;
@@ -124,12 +126,17 @@ export default async function handler(req, res) {
     }
     // Creators with no rate card get a computed floor price client-side, so
     // there is nothing server-side to verify against — accept rather than
-    // false-reject legitimate bookings.
+    // false-reject legitimate bookings. Item 28: but never accept a paid
+    // booking BELOW the ₹100 gateway floor when there is no rate card —
+    // sub-floor payments are all fee/overhead (and the Cashfree order itself
+    // requires >= ₹100).
     if (listed.length > 0) {
       const ok = listed.some((p) => Math.abs(p - creatorPrice) <= 1);
       if (!ok) return json(res, 400, { error: 'creator_price_mismatch' });
     } else {
       console.warn('[booking-create] no rate card for creator ' + creatorId + ' — price check skipped');
+      if (creatorPrice < MIN_ORDER_INR)
+        return json(res, 400, { error: 'below_booking_minimum', minimum: MIN_ORDER_INR });
     }
   }
 
@@ -161,7 +168,8 @@ export default async function handler(req, res) {
   if (!orderCust || String(orderCust) !== uid) return json(res, 403, { error: 'order_owner_mismatch' });
 
   // (c) server-computed expected total — canonical pricing formula.
-  // Business Pro = 5% off the CREATOR PRICE first, then 12% fee on the discounted price.
+  // Business Pro = 5% off the CREATOR PRICE first (Item 24: capped at
+  // PRO_DISCOUNT_CAP_INR = ₹999/month), then 12% fee on the discounted price.
   // Item 13 (Cycle 16): unified on lib/pricing isProActiveBiz (respects the
   // 30-day subscription expiry; the old inline check never expired).
   let isPro = false;
@@ -173,12 +181,12 @@ export default async function handler(req, res) {
   } catch (e) {
     return json(res, 500, { error: 'brand_lookup_failed' });
   }
-  const discount = isPro ? Math.round(creatorPrice * 0.05) : 0;
+  const discount = isPro ? Math.min(Math.round(creatorPrice * 0.05), PRO_DISCOUNT_CAP_INR) : 0;
   const discounted = creatorPrice - discount;
   const fee = Math.round(discounted * 0.12);
   const expectedTotal = discounted + fee;
-  // Item 2 (Cycle 19, MONET): /api/cashfree-order adds the UPI MDR (0.4% on
-  // totals >= Rs.2,000, capped Rs.300) by default, so a legitimately paid
+  // Item 2 (Cycle 19, MONET): /api/cashfree-order adds the UPI MDR when the
+  // UPI_MDR_ENABLED kill-switch is on (currently OFF), so a legitimately paid
   // order may equal expectedTotal OR expectedTotal + MDR. Tolerate both —
   // rejecting the MDR-inclusive amount would strand the brand's money after
   // it was already collected (400 amount_mismatch, booking never created).
@@ -188,6 +196,13 @@ export default async function handler(req, res) {
     return json(res, 400, { error: 'amount_mismatch', expected: expectedTotal, got: orderAmount });
   }
   if (!(expectedTotal > 0)) return json(res, 400, { error: 'bad_total' });
+  // Item 12: the MDR line actually charged at the gateway. With the kill-
+  // switch OFF this is 0; when ON, the order may carry expectedTotal + MDR.
+  // Stored on the booking doc so refunds can return the full amount the
+  // brand paid (paidAmount + upiMdr), not just the pre-MDR total.
+  const mdrCharged = upiMdrCharge(expectedTotal);
+  const upiMdr = (mdrCharged > 0 && Math.abs(orderAmount - (expectedTotal + mdrCharged)) <= 1)
+    ? mdrCharged : 0;
 
   // (d) transaction: order-reuse registry + booking write, atomically.
   const bookingId = 'collab_' + fp;
@@ -248,6 +263,10 @@ export default async function handler(req, res) {
         amount: expectedTotal, creatorPrice,
         escrowAmount: expectedTotal, platformFee: fee, proDiscount: discount,
         paidAmount: expectedTotal,
+        // Item 12: the UPI MDR line actually charged at the gateway (0 while
+        // the kill-switch is off). Refunds must use paidAmount + upiMdr —
+        // see refundableBookingTotal() in lib/pricing.js.
+        upiMdr,
         paymentMethod: 'cashfree', paymentStatus: 'escrow_held', escrowStatus: 'held',
         paymentReference: orderId, demoPayment: false,
         cashfreeEnv: env, paymentApproved: false, refundProcessed: false, refundStatus: null,

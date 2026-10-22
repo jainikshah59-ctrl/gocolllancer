@@ -21,7 +21,7 @@
  *    The registry row flips 'created' -> 'credited' inside the transaction,
  *    so retried webhooks can never double-credit.
  *
- * Pro subscriptions (paid Business Pro, Rs.999/month):
+ * Pro subscriptions (paid Business Pro, ₹999/month):
  *  - Orders registered with purpose:'pro_subscription' are activated
  *    SERVER-SIDE on PAYMENT_SUCCESS: businesses/{uid} gets isPro:true,
  *    proActive:true and proSubscription{status:'active',
@@ -275,7 +275,7 @@ export default async function handler(req, res) {
             await db.collection('bizNotifs').add({
               bizId, type: 'wallet_credited',
               title: 'Wallet credited',
-              body: 'Your Collancer wallet was topped up by Rs.' +
+              body: 'Your Collancer wallet was topped up by ₹' +
                 Number(amount || 0).toLocaleString('en-IN') + ' via Cashfree.',
               orderId, read: false, createdAt: FieldValue.serverTimestamp(),
             });

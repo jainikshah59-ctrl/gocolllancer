@@ -1,15 +1,15 @@
 /* POST /api/cashfree-order
  * Creates a Cashfree PG order server-side (secret key never leaves the server).
  * Env: CASHFREE_APP_ID, CASHFREE_SECRET_KEY, CASHFREE_ENV ('test' | 'production', default 'test').
- * Input:  { amount, purpose, creatorId, creatorPrice, label, paymentMethod, customer: { email, phone } }
+ * Input:  { amount, purpose, creatorId, creatorPrice, label, customer: { email, phone } }
  *          (`customer.id` is ignored — customer_id is always the verified UID.)
- *          `paymentMethod` is an optional hint ('upi' | 'card' | 'netbanking'
- *          | 'wallet'). Item 3 (Cycle 19): the hint is client-controlled and
- *          unverifiable pre-payment, so the UPI MDR (0.4% on totals >=
- *          Rs.2,000, capped Rs.300) now applies BY DEFAULT on every gateway
- *          order — the hint can no longer dodge it. Only 'wallet' (internal
- *          ledger top-ups, which never touch the gateway) is exempt. The
- *          server recomputes everything from the creator's rate card.
+ *          (`paymentMethod` is no longer accepted: Item 21 — the client hint
+ *          was unverifiable pre-payment and could be used to dodge MDR
+ *          logic. The server decides MDR from the actual payment path: every
+ *          order created here goes through the Cashfree gateway, so MDR
+ *          applies when the UPI_MDR_ENABLED kill-switch is on. Only the
+ *          internal ledger (book-with-wallet, never calls this endpoint)
+ *          is exempt.)
  * Output: { configured: true, payment_session_id, order_id, order_status, order_amount, purpose, env }
  *         or { configured: false } when keys are not set (frontend falls back to demo simulation).
  *
@@ -48,6 +48,15 @@ function json(res, code, obj) {
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return json(res, 405, { error: 'method_not_allowed' });
+
+  // Item 20: rate limit — this endpoint burns Cashfree API quota and creates
+  // real payment orders; unchecked spam can exhaust quota or create junk
+  // orders. Pattern matches every other money endpoint in api/.
+  try {
+    const { rateLimit } = await import('../lib/rateLimit.js');
+    if (!rateLimit(req, res, { max: 30, windowMs: 60000, key: 'cashfree-order' })) return;
+  } catch { /* rate limiter must never block the happy path */ }
+
   const appId = process.env.CASHFREE_APP_ID;
   const secret = process.env.CASHFREE_SECRET_KEY;
   const env = (process.env.CASHFREE_ENV || 'test').toLowerCase() === 'production' ? 'production' : 'test';
@@ -86,7 +95,7 @@ export default async function handler(req, res) {
   } else if (purpose === 'wallet_topup') {
     const amt = Number(body.amount);
     if (!Number.isFinite(amt) || amt < 100 || amt > 100000)
-      return json(res, 400, { error: 'bad_amount', detail: 'Top-up must be between Rs.100 and Rs.1,00,000.' });
+      return json(res, 400, { error: 'bad_amount', detail: 'Top-up must be between ₹100 and ₹1,00,000.' });
     chargeAmount = Math.round(amt * 100) / 100;
   } else {
     // booking_payment: recompute the canonical total from the creator's
@@ -110,12 +119,15 @@ export default async function handler(req, res) {
       const bizSnap = await db.collection('businesses').doc(uid).get();
       isPro = isProActiveBiz(bizSnap.exists ? bizSnap.data() : null);
     } catch { return json(res, 500, { error: 'brand_lookup_failed' }); }
-    // UPI MDR (Item 3, Cycle 19): the paymentMethod hint is client-controlled
-    // and unverifiable before the gateway reports the real method, so the MDR
-    // (0.4% on totals >= Rs.2,000, capped Rs.300) applies BY DEFAULT here —
-    // canonicalTotal ignores the hint except for 'wallet' (internal ledger).
-    const paymentMethod = String(body.paymentMethod || '').toLowerCase();
-    chargeAmount = canonicalTotal(isPro, creatorPrice, { paymentMethod }).total;
+    // Item 21 (SENTINEL): the client's paymentMethod hint is NEVER forwarded
+    // to the pricing math — it was unverifiable pre-payment and honoring
+    // 'wallet' from the client would let a gateway order dodge MDR. The
+    // server decides MDR from the actual payment path: this endpoint always
+    // creates a Cashfree GATEWAY order, so canonicalTotal applies MDR per the
+    // UPI_MDR_ENABLED kill-switch (currently OFF — upiMdr = 0). Only the
+    // internal ledger (book-with-wallet, server-side 'wallet' flag, no
+    // gateway) is exempt.
+    chargeAmount = canonicalTotal(isPro, creatorPrice).total;
     if (!(chargeAmount > 0)) return json(res, 400, { error: 'bad_total' });
   }
 
@@ -149,7 +161,7 @@ export default async function handler(req, res) {
           notify_url: APP_URL + '/api/cashfree-webhook',
         },
         order_note: String(body.label || (purpose === 'wallet_topup' ? 'Collancer wallet top-up'
-          : purpose === 'pro_subscription' ? 'Collancer Business Pro subscription (Rs.' + PRO_SUBSCRIPTION_PRICE_INR + ')'
+          : purpose === 'pro_subscription' ? 'Collancer Business Pro subscription (₹' + PRO_SUBSCRIPTION_PRICE_INR + ')'
           : (label || 'Collancer payment'))).slice(0, 200),
       }),
     });

@@ -304,7 +304,49 @@
         },
         {
           "fieldPath": "createdAt",
-          "order": "DESCENDING"
+          "order": "ASCENDING"
+        }
+      ],
+      "queryScope": "COLLECTION"
+    },
+    {
+      "collectionGroup": "payoutRequests",
+      "fields": [
+        {
+          "fieldPath": "creatorId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        }
+      ],
+      "queryScope": "COLLECTION"
+    },
+    {
+      "collectionGroup": "bookings",
+      "fields": [
+        {
+          "fieldPath": "creatorId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        }
+      ],
+      "queryScope": "COLLECTION"
+    },
+    {
+      "collectionGroup": "bookings",
+      "fields": [
+        {
+          "fieldPath": "bizId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
         }
       ],
       "queryScope": "COLLECTION"
