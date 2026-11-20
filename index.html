@@ -1627,6 +1627,8 @@ window.addEventListener('load',function(){place(false)});
 /* ===== login ===== */
 (function(){var root=document.getElementById("s-login"),__go=Collancer.go;function __q(i){return root.querySelector("#"+i)}
 
+/* TEMPORARY LOGIN BYPASS: shared with connect/creator-connect.js. */
+window.COLLANCER_LOGIN_DISABLED_TEMPORARILY=true;
 var seg=__q('seg'),sb=__q('sb'),note=__q('note'),pw=__q('pw');
 seg.addEventListener('click',function(e){var d=e.target.closest('#seg>div');if(!d)return;seg.querySelectorAll('div').forEach(function(x){x.classList.remove('on')});d.classList.add('on');var reg=d.textContent==='Register';sb.textContent=reg?'Create account':'Log in';note.textContent=reg?'Already a creator? Switch to the Log in tab.':'New here? Switch to the Register tab to join as a creator.';pw.placeholder=reg?'Create a password':'Your password'});
 __q('eye').addEventListener('click',function(){pw.type=pw.type==='password'?'text':'password'});
