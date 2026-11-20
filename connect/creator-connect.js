@@ -104,7 +104,7 @@ function init() {
   initPullToRefresh();
   initMoneyLangToggle();
   FB.onAuth(function (u) {
-    if (!u) { teardown(); try { Collancer.go('login'); } catch (e) {} return; }
+    if (!u) { teardown(); if (!window.COLLANCER_LOGIN_DISABLED_TEMPORARILY) { try { Collancer.go('login'); } catch (e) {} } return; }
     uid = u.uid;
     try { Collancer.go('home'); } catch (e) {}
     afterLogin(u);
@@ -235,7 +235,7 @@ function showCreatorMenu() {
     var k = b.getAttribute('data-cm');
     cconCloseSheet();
     if (k === 'logout') {
-      FB.logout().then(function () { try { Collancer.go('login'); } catch (x) {} });
+      FB.logout().then(function () { try { Collancer.go(window.COLLANCER_LOGIN_DISABLED_TEMPORARILY ? 'home' : 'login'); } catch (x) {} });
     } else if (k === 'help') {
       toast('Need help? Email support@collancer.in — we reply within 24 hours.');
     } else {
@@ -429,7 +429,7 @@ function wireEvents() {
     if (sbtn && !/phone/i.test(sbtn.textContent)) { e.stopPropagation(); e.preventDefault(); doGoogle(); return; }
     if (q('#s-profile .black.red')) {
       e.stopPropagation(); e.preventDefault();
-      FB.logout().then(function () { try { Collancer.go('login'); } catch (x) {} });
+      FB.logout().then(function () { try { Collancer.go(window.COLLANCER_LOGIN_DISABLED_TEMPORARILY ? 'home' : 'login'); } catch (x) {} });
       return;
     }
     /* Item 5 (Cycle 21): DPDP deletion is now an in-app sheet owned by the
